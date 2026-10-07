@@ -122,6 +122,9 @@ services:
       ALERTMANAGER_URL: http://alertmanager:9093
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./frontend:/app/frontend:ro
     depends_on:
       postgres:
         condition: service_healthy

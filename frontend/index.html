@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise Infrastructure Monitoring & Incident Management Portal</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <!-- Custom NOC Theme -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark navbar-noc sticky-top px-3">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <span class="brand-badge"><i class="bi bi-shield-check me-1"></i>EIM-PLATFORM</span>
+        <span class="fw-semibold text-light fs-6 d-none d-sm-inline">NOC Operations & Incident Center</span>
+      </a>
+
+      <div class="d-flex align-items-center gap-3">
+        <span id="envBadge" class="badge bg-secondary">ENV: LOCAL</span>
+        <div id="userInfoNav" class="d-none align-items-center gap-2">
+          <span class="text-secondary small">Logged in as:</span>
+          <span id="navUsername" class="badge bg-primary">admin</span>
+          <button class="btn btn-sm btn-outline-danger ms-2" onclick="logout()">
+            <i class="bi bi-box-arrow-right me-1"></i>Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Login Screen View (Shown when not authenticated) -->
+  <div id="loginView" class="container">
+    <div class="noc-card login-card">
+      <div class="text-center mb-4">
+        <i class="bi bi-cpu text-primary" style="font-size: 3rem;"></i>
+        <h4 class="mt-2 fw-bold text-light">NOC Portal Authentication</h4>
+        <p class="text-secondary small">Sign in to access infrastructure monitoring & incident triage</p>
+      </div>
+
+      <div id="loginAlert" class="alert alert-danger d-none py-2 small" role="alert"></div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="mb-3">
+          <label class="form-label text-secondary small fw-semibold">Username</label>
+          <div class="input-group">
+            <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-person"></i></span>
+            <input type="text" id="loginUsername" class="form-control bg-dark text-light border-secondary" placeholder="admin / operator / viewer" required value="admin">
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-secondary small fw-semibold">Password</label>
+          <div class="input-group">
+            <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-lock"></i></span>
+            <input type="password" id="loginPassword" class="form-control bg-dark text-light border-secondary" placeholder="Password" required value="AdminPassword123!">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+          <i class="bi bi-box-arrow-in-right me-1"></i> Authenticate & Enter NOC
+        </button>
+
+        <div class="mt-3 p-2 bg-dark rounded border border-secondary text-secondary small">
+          <strong>Default Credentials:</strong><br>
+          • <code>admin</code> / <code>AdminPassword123!</code> (Admin Role)<br>
+          • <code>operator</code> / <code>OperatorPassword123!</code> (NOC Operator)<br>
+          • <code>viewer</code> / <code>ViewerPassword123!</code> (Read-Only)
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Application Container (Shown when authenticated) -->
+  <div id="appContainer" class="container-fluid py-3 px-4 d-none">
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-pills mb-4 gap-2" id="nocTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-dashboard" data-bs-toggle="pill" data-bs-target="#pane-dashboard" type="button">
+          <i class="bi bi-speedometer2 me-1"></i> Dashboard Overview
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-servers" data-bs-toggle="pill" data-bs-target="#pane-servers" type="button" onclick="loadServers()">
+          <i class="bi bi-hdd-rack me-1"></i> Servers Inventory
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-alerts" data-bs-toggle="pill" data-bs-target="#pane-alerts" type="button" onclick="loadAlerts()">
+          <i class="bi bi-bell me-1"></i> Prometheus Alerts
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-incidents" data-bs-toggle="pill" data-bs-target="#pane-incidents" type="button" onclick="loadIncidents()">
+          <i class="bi bi-exclamation-octagon me-1"></i> Incidents Queue
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-reports" data-bs-toggle="pill" data-bs-target="#pane-reports" type="button" onclick="loadReports()">
+          <i class="bi bi-file-earmark-bar-graph me-1"></i> SLA & Reports
+        </button>
+      </li>
+      <li class="nav-item ms-auto">
+        <button class="btn btn-outline-info btn-sm" onclick="refreshCurrentTab()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Refresh Data
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab Contents -->
+    <div class="tab-content" id="nocTabContent">
+
+      <!-- 1. DASHBOARD OVERVIEW PANE -->
+      <div class="tab-pane fade show active" id="pane-dashboard" role="tabpanel">
+        <!-- Top Metric Cards -->
+        <div class="row g-3 mb-4">
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Total Monitored</div>
+                <div id="statTotalSystems" class="metric-value text-info">--</div>
+              </div>
+              <i class="bi bi-server metric-icon text-info"></i>
+            </div>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Systems Healthy</div>
+                <div id="statSystemsUp" class="metric-value text-success">--</div>
+              </div>
+              <i class="bi bi-check-circle metric-icon text-success"></i>
+            </div>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Systems Down</div>
+                <div id="statSystemsDown" class="metric-value text-danger">--</div>
+              </div>
+              <i class="bi bi-x-octagon metric-icon text-danger"></i>
+            </div>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Availability %</div>
+                <div id="statAvailability" class="metric-value text-primary">--%</div>
+              </div>
+              <i class="bi bi-activity metric-icon text-primary"></i>
+            </div>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Active Incidents</div>
+                <div id="statOpenIncidents" class="metric-value text-warning">--</div>
+              </div>
+              <i class="bi bi-exclamation-triangle metric-icon text-warning"></i>
+            </div>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="metric-card">
+              <div>
+                <div class="metric-label">Avg MTTR</div>
+                <div id="statAvgMttr" class="metric-value text-light">-- m</div>
+              </div>
+              <i class="bi bi-stopwatch metric-icon text-secondary"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Priority Breakdown & Top Problems -->
+        <div class="row g-3 mb-4">
+          <div class="col-lg-4">
+            <div class="noc-card p-3 h-100">
+              <h6 class="fw-bold text-light mb-3"><i class="bi bi-pie-chart me-2"></i>Incident Priority Matrix</h6>
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-dark border border-secondary">
+                <span class="badge badge-p1">P1 Critical</span>
+                <span id="statP1Count" class="fw-bold fs-5 text-danger">0</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-dark border border-secondary">
+                <span class="badge badge-p2">P2 High</span>
+                <span id="statP2Count" class="fw-bold fs-5 text-warning">0</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-dark border border-secondary">
+                <span class="badge badge-p3">P3 Medium</span>
+                <span id="statP3Count" class="fw-bold fs-5 text-info">0</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center p-2 rounded bg-dark border border-secondary">
+                <span class="badge badge-p4">P4 Low</span>
+                <span id="statP4Count" class="fw-bold fs-5 text-primary">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-8">
+            <div class="noc-card p-3 h-100">
+              <h6 class="fw-bold text-light mb-3"><i class="bi bi-graph-up-arrow me-2"></i>Top Alerting Systems (Recurrent Failures)</h6>
+              <div class="table-responsive">
+                <table class="table table-noc table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>System / Host</th>
+                      <th>Total Incidents Triggered</th>
+                      <th>Operational Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody id="topSystemsTableBody">
+                    <tr><td colspan="3" class="text-center text-secondary py-3">Loading system records...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. SERVERS INVENTORY PANE -->
+      <div class="tab-pane fade" id="pane-servers" role="tabpanel">
+        <div class="noc-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-light mb-0"><i class="bi bi-hdd-network me-2"></i>Infrastructure Server Inventory</h5>
+            <span class="badge bg-secondary">Linux & Windows Targets</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-noc table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Hostname</th>
+                  <th>IP Address</th>
+                  <th>OS Type</th>
+                  <th>Environment</th>
+                  <th>Status</th>
+                  <th>CPU Cores</th>
+                  <th>RAM (GB)</th>
+                  <th>Disk (GB)</th>
+                  <th>Last Scraped</th>
+                </tr>
+              </thead>
+              <tbody id="serversTableBody">
+                <tr><td colspan="9" class="text-center text-secondary py-3">Loading server inventory...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. PROMETHEUS ALERTS PANE -->
+      <div class="tab-pane fade" id="pane-alerts" role="tabpanel">
+        <div class="noc-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-light mb-0"><i class="bi bi-broadcast me-2"></i>Prometheus Ingested Alerts</h5>
+            <span class="badge bg-secondary">Real-Time Ingestion Feed</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-noc table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Alert Name</th>
+                  <th>Target Instance</th>
+                  <th>Severity</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Summary</th>
+                  <th>Triggered At</th>
+                </tr>
+              </thead>
+              <tbody id="alertsTableBody">
+                <tr><td colspan="7" class="text-center text-secondary py-3">Loading alert telemetry...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. INCIDENTS QUEUE PANE -->
+      <div class="tab-pane fade" id="pane-incidents" role="tabpanel">
+        <div class="noc-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-light mb-0"><i class="bi bi-ticket-detailed me-2"></i>ITIL Incident Queue</h5>
+            <div class="d-flex gap-2">
+              <select id="incidentStatusFilter" class="form-select form-select-sm bg-dark text-light border-secondary" onchange="loadIncidents()">
+                <option value="">All Statuses</option>
+                <option value="OPEN">Open Only</option>
+                <option value="ACKNOWLEDGED">Acknowledged</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="RESOLVED">Resolved</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-noc table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Incident ID</th>
+                  <th>Title</th>
+                  <th>Priority</th>
+                  <th>Severity</th>
+                  <th>Target System</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="incidentsTableBody">
+                <tr><td colspan="8" class="text-center text-secondary py-3">Loading incident queue...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. REPORTS & SLA PANE -->
+      <div class="tab-pane fade" id="pane-reports" role="tabpanel">
+        <div class="noc-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h5 class="fw-bold text-light mb-1"><i class="bi bi-file-earmark-text me-2"></i>Executive & SLA Compliance Reports</h5>
+              <p class="text-secondary small mb-0">Mean Time to Resolution (MTTR), SLA compliance, and incident history.</p>
+            </div>
+            <button class="btn btn-success btn-sm" onclick="exportIncidentsCSV()">
+              <i class="bi bi-download me-1"></i> Export Incident Log (CSV)
+            </button>
+          </div>
+
+          <div class="row g-3 mt-2">
+            <div class="col-md-4">
+              <div class="p-3 bg-dark rounded border border-secondary text-center">
+                <div class="text-secondary small">OVERALL SERVICE AVAILABILITY</div>
+                <div id="reportAvailability" class="display-6 fw-bold text-primary my-2">--%</div>
+                <div class="text-success small"><i class="bi bi-shield-check me-1"></i>Within Target SLA (99.5%)</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="p-3 bg-dark rounded border border-secondary text-center">
+                <div class="text-secondary small">AVERAGE MEAN TIME TO RESOLUTION (MTTR)</div>
+                <div id="reportAvgMttr" class="display-6 fw-bold text-warning my-2">-- min</div>
+                <div class="text-secondary small"><i class="bi bi-stopwatch me-1"></i>Target MTTR: &lt; 60 mins</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="p-3 bg-dark rounded border border-secondary text-center">
+                <div class="text-secondary small">TOTAL TICKETS LOGGED</div>
+                <div id="reportTotalIncidents" class="display-6 fw-bold text-light my-2">--</div>
+                <div class="text-secondary small"><i class="bi bi-journal-text me-1"></i>Automated ITIL Records</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Incident Details & Triage Modal -->
+  <div class="modal fade" id="incidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content modal-content-noc">
+        <div class="modal-header modal-header-noc">
+          <h5 class="modal-title fw-bold" id="modalIncidentNumber">INC-2026-XXXX</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 id="modalIncidentTitle" class="text-light fw-semibold mb-0">Incident Title</h5>
+            <span id="modalPriorityBadge" class="badge badge-p1">P1</span>
+          </div>
+
+          <div class="row g-2 mb-3 small">
+            <div class="col-sm-4"><strong class="text-secondary">Target:</strong> <span id="modalTargetSystem" class="text-light">--</span></div>
+            <div class="col-sm-4"><strong class="text-secondary">Current Status:</strong> <span id="modalStatusBadge" class="badge badge-open">OPEN</span></div>
+            <div class="col-sm-4"><strong class="text-secondary">Created:</strong> <span id="modalCreatedAt" class="text-light">--</span></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-secondary small fw-semibold">Description</label>
+            <div id="modalDescription" class="p-2 rounded bg-dark border border-secondary text-light small"></div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label text-secondary small fw-semibold">Root Cause Analysis</label>
+              <textarea id="modalRootCause" class="form-control bg-dark text-light border-secondary small" rows="2" placeholder="Document verified root cause..."></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label text-secondary small fw-semibold">Resolution Notes</label>
+              <textarea id="modalResolutionNotes" class="form-control bg-dark text-light border-secondary small" rows="2" placeholder="Document remediation actions taken..."></textarea>
+            </div>
+          </div>
+
+          <!-- Collaboration Comments -->
+          <div class="mb-3">
+            <label class="form-label text-secondary small fw-semibold">Triage Comments & Audit Trail</label>
+            <div id="modalCommentsContainer" class="p-2 rounded bg-dark border border-secondary mb-2" style="max-height: 140px; overflow-y: auto;">
+              <span class="text-secondary small">No comments logged yet.</span>
+            </div>
+            <div class="input-group input-group-sm">
+              <input type="text" id="newCommentInput" class="form-control bg-dark text-light border-secondary" placeholder="Add engineering triage comment...">
+              <button class="btn btn-outline-primary" type="button" onclick="submitComment()">Add Comment</button>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer modal-footer-noc d-flex justify-content-between">
+          <div class="d-flex gap-2">
+            <button id="btnAckIncident" class="btn btn-warning btn-sm" onclick="updateIncidentStatus('ACKNOWLEDGED')">
+              <i class="bi bi-eye me-1"></i> Acknowledge
+            </button>
+            <button id="btnProgIncident" class="btn btn-info btn-sm text-dark" onclick="updateIncidentStatus('IN_PROGRESS')">
+              <i class="bi bi-gear me-1"></i> In Progress
+            </button>
+            <button id="btnResolveIncident" class="btn btn-success btn-sm" onclick="updateIncidentStatus('RESOLVED')">
+              <i class="bi bi-check2-circle me-1"></i> Resolve Incident
+            </button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Application Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>

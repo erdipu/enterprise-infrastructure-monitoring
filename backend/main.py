@@ -158,6 +158,17 @@ app.include_router(servers.router, prefix=settings.API_V1_STR)
 app.include_router(targets.router, prefix=settings.API_V1_STR)
 app.include_router(reports.router, prefix=settings.API_V1_STR)
 
+# Mount Frontend NOC Portal
+from fastapi.staticfiles import StaticFiles
+import os
+
+frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+if not os.path.exists(frontend_path):
+    frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
