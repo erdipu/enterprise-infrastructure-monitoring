@@ -8,19 +8,19 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ED)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-An enterprise-grade, 100% open-source, and locally runnable **Infrastructure Observability & ITIL Incident Management Platform**. Engineered to emulate key operational capabilities of enterprise monitoring platforms such as **BMC TrueSight Operations Management** and **OpsRamp**, this project unifies host infrastructure telemetry, synthetic website/API probing, event deduplication, threshold alerting, automated ITIL incident ticketing, SLA compliance tracking, and operational runbook execution.
+An enterprise-grade, 100% open-source **Infrastructure Observability & ITIL Incident Operations Platform**. Designed for deployment in corporate datacenters, enterprise NOCs, and hybrid cloud environments—delivering the robustness and operational depth of commercial solutions like **BMC TrueSight Operations Management** and **OpsRamp**—this system unifies host telemetry, synthetic endpoint monitoring, noise suppression, automated ITIL incident ticketing, SLA enforcement, and operational runbook execution.
 
 ---
 
 ## 1. Project Overview
 
-Modern enterprise IT environments require centralized observability across heterogeneous Linux and Windows servers, internal microservices, and customer-facing websites. When infrastructure degrades or outages occur, operations teams must avoid alert fatigue, correlate root causes, enforce SLAs, and adhere to standard operating procedures (SOPs).
+Modern enterprise IT departments require centralized observability across heterogeneous Linux and Windows fleets, VMware vCenter clusters, internal microservices, and customer-facing portals. When infrastructure degrades or outages occur, corporate operations teams must eliminate alert fatigue, correlate root causes, enforce SLAs, and adhere to Standard Operating Procedures (SOPs).
 
-This platform delivers an end-to-end monitoring and incident response architecture:
+This platform delivers an end-to-end operational monitoring and incident response architecture:
 - **Telemetry Collection**: Prometheus scrapes kernel performance metrics via Node Exporter and synthetic probes via Blackbox Exporter.
 - **Noise Elimination**: Alertmanager applies grouping and **inhibit (suppression) rules** to prevent cascade alert storms.
 - **ITIL Incident Engine**: A Python/FastAPI automation service ingests alert webhooks, deduplicates firing events using cryptographic fingerprints, generates sequential tickets (`INC-2026-XXXX`), and auto-resolves tickets with **Mean Time to Resolution (MTTR)** calculation.
-- **Operations Interfaces**: A custom dark-mode **NOC Web Portal** and auto-provisioned **Grafana Dashboards**.
+- **Corporate Operations Interfaces**: A responsive dark-mode **NOC Web Portal** and auto-provisioned **Grafana Dashboards**.
 
 ---
 
@@ -231,15 +231,15 @@ Every alert rule contains a `runbook_url` pointing directly to an SOP in `runboo
 
 ---
 
-## 11. Comprehensive Documentation Guides
-
-- [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and dataflow walkthrough.
-- [`docs/INSTALLATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INSTALLATION_GUIDE.md): Step-by-step installation for macOS, Linux, and Windows.
+## 11. Enterprise Engineering Documentation Guides
+ 
+- [`docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md): Corporate production playbook, Windows Active Directory / IIS, VMware ESXi / vCenter, SNMP network monitoring, automated maintenance windows, and backup strategies.
+- [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and corporate dataflow walkthrough.
+- [`docs/INSTALLATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INSTALLATION_GUIDE.md): Step-by-step production installation for Linux, Windows, and macOS.
 - [`docs/CONFIGURATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/CONFIGURATION_GUIDE.md): Threshold tuning, PromQL reference, and custom alert authoring.
-- [`docs/OPERATIONS_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/OPERATIONS_GUIDE.md): NOC daily workflow, ticket triage, and SLA targets.
+- [`docs/OPERATIONS_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/OPERATIONS_GUIDE.md): Corporate NOC daily workflow, ticket triage, and SLA targets.
 - [`docs/TROUBLESHOOTING_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/TROUBLESHOOTING_GUIDE.md): Common operational failure scenarios and step-by-step fixes.
-- [`docs/INTERVIEW_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INTERVIEW_GUIDE.md): **30 technical interview questions and answers** covering monitoring, TSDBs, ITIL, Linux, and BMC TrueSight / OpsRamp comparisons.
-- [`docs/RESUME_PROJECT_DESCRIPTION.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/RESUME_PROJECT_DESCRIPTION.md): Resume-ready bullet points, LinkedIn summaries, and skills breakdown.
+- [`docs/INTERVIEW_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INTERVIEW_GUIDE.md): 30 technical deep-dive questions and architectural analyses covering TSDBs, ITIL, Linux, and BMC TrueSight / OpsRamp comparisons.
 
 ---
 
