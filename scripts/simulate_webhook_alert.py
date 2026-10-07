@@ -54,7 +54,7 @@ def send_alert_webhook(backend_url, alertname, instance, priority, severity, sta
 
 def main():
     parser = argparse.ArgumentParser(description="Simulate Alertmanager webhook dispatch to backend")
-    parser.add_argument("--url", default="http://localhost:8000", help="Backend URL (default: http://localhost:8000)")
+    parser.add_argument("--url", default="http://localhost:8090", help="Backend URL (default: http://localhost:8090)")
     parser.add_argument("--alert", default="HostDown", help="Alert name (default: HostDown)")
     parser.add_argument("--instance", default="srv-linux-prod-01", help="Target instance (default: srv-linux-prod-01)")
     parser.add_argument("--priority", default="P1", help="Priority P1, P2, P3, P4 (default: P1)")

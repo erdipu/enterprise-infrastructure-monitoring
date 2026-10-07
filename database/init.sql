@@ -178,9 +178,9 @@ ON CONFLICT (hostname) DO NOTHING;
 -- Seed Synthetic Probing Targets
 INSERT INTO monitoring_targets (name, target_type, url_or_host, port, check_interval_sec, expected_status_code, status, last_response_time_ms, last_check)
 VALUES
-    ('Production Web Portal', 'website', 'http://localhost:8000/health', 8000, 15, 200, 'UP', 185.40, CURRENT_TIMESTAMP),
-    ('Core Payments REST API', 'api', 'http://localhost:8000/api/v1/health', 8000, 15, 200, 'UP', 92.10, CURRENT_TIMESTAMP),
-    ('Customer Checkout Service', 'website', 'http://localhost:8000/api/v1/servers', 8000, 30, 200, 'UP', 210.00, CURRENT_TIMESTAMP)
+    ('Production Web Portal', 'website', 'http://localhost:8090/health', 8090, 15, 200, 'UP', 185.40, CURRENT_TIMESTAMP),
+    ('Core Payments REST API', 'api', 'http://localhost:8090/api/v1/health', 8090, 15, 200, 'UP', 92.10, CURRENT_TIMESTAMP),
+    ('Customer Checkout Service', 'website', 'http://localhost:8090/api/v1/servers', 8090, 30, 200, 'UP', 210.00, CURRENT_TIMESTAMP)
 ON CONFLICT (name) DO NOTHING;
 
 -- Seed Historical Incidents for Immediate Dashboard & MTTR Metrics

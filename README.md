@@ -163,8 +163,8 @@ docker compose up -d
 
 | Component | URL | Default Credentials | Purpose |
 |---|---|---|---|
-| **Custom NOC Web Portal** | [http://localhost:8000](http://localhost:8000) | `admin` / `AdminPassword123!` | Incident queue, server inventory, triage modal, CSV export |
-| **FastAPI Swagger Docs** | [http://localhost:8000/docs](http://localhost:8000/docs) | N/A | Interactive REST API documentation |
+| **Custom NOC Web Portal** | [http://localhost:8090](http://localhost:8090) | `admin` / `AdminPassword123!` | Incident queue, server inventory, triage modal, CSV export |
+| **FastAPI Swagger Docs** | [http://localhost:8090/docs](http://localhost:8090/docs) | N/A | Interactive REST API documentation |
 | **Grafana Dashboards** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin` | Executive & technical metrics visualizations |
 | **Prometheus Web UI** | [http://localhost:9090](http://localhost:9090) | N/A | TSDB queries, target health, rule status |
 | **Alertmanager Console** | [http://localhost:9093](http://localhost:9093) | N/A | Active alert grouping, routes, silences |

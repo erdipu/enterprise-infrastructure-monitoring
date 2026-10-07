@@ -121,7 +121,7 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       ALERTMANAGER_URL: http://alertmanager:9093
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8090}:8000"
     volumes:
       - ./backend:/app
       - ./frontend:/app/frontend:ro

@@ -5,6 +5,7 @@ class Settings:
     PROJECT_NAME: str = "Enterprise Infrastructure Monitoring & Incident Management Platform"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8090"))
 
     # PostgreSQL Database settings
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
