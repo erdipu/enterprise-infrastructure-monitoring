@@ -5,7 +5,7 @@ An enterprise-grade, end-to-end infrastructure monitoring and IT incident manage
 ## Project Status
 
 - [x] **Phase 1: Environment Setup & Foundation**
-- [ ] **Phase 2: Core Architecture & PostgreSQL Schema**
+- [x] **Phase 2: Core Architecture & PostgreSQL Schema**
 - [ ] **Phase 3: Prometheus & Exporter Configuration**
 - [ ] **Phase 4: Alert Rules & Alertmanager Setup**
 - [ ] **Phase 5: FastAPI Backend & Automated Incident Engine**
