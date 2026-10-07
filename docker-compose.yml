@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ============================================================================
   # 1. PostgreSQL Database (Persistent datastore for inventory, incidents, RBAC)
