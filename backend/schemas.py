@@ -1,6 +1,6 @@
 import datetime
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 # ------------------------------------------------------------------------------
 # Auth & User Schemas
@@ -21,7 +21,7 @@ class UserLogin(BaseModel):
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
+    email: str
     full_name: str
     role: str = "operator"
     is_active: bool = True
