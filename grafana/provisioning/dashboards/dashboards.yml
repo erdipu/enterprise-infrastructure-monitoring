@@ -1,0 +1,17 @@
+# ==============================================================================
+# Grafana Dashboards Provider Provisioning
+# Automatically imports dashboards from JSON definitions
+# ==============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'Enterprise Infrastructure Monitoring'
+    orgId: 1
+    folder: 'Operations & Infrastructure'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

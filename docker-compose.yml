@@ -136,6 +136,33 @@ services:
     networks:
       - monitoring-net
 
+  # ============================================================================
+  # 7. Grafana Visualization & Executive Operations Dashboard
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: eim-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - monitoring-net
+
 networks:
   monitoring-net:
     driver: bridge
@@ -144,3 +171,4 @@ volumes:
   postgres_data:
   prometheus_data:
   alertmanager_data:
+  grafana_data:

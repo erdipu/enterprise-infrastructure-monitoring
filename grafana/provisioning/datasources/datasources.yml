@@ -1,0 +1,35 @@
+# ==============================================================================
+# Grafana Datasources Provisioning
+# Automatically hooks Prometheus and PostgreSQL without manual configuration
+# ==============================================================================
+
+apiVersion: 1
+
+datasources:
+  # 1. Prometheus Time-Series Engine
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+
+  # 2. PostgreSQL Relational Datastore (Incidents, Servers, Inventory)
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: monitoring_db
+    user: postgres
+    secureJsonData:
+      password: postgres_secure_password_replace_me
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+    editable: true
