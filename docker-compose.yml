@@ -79,6 +79,29 @@ services:
     networks:
       - monitoring-net
 
+  # ============================================================================
+  # 5. Prometheus Alertmanager (Routing, Inhibit Rules, Incident Webhook)
+  # ============================================================================
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: eim-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - monitoring-net
+
 networks:
   monitoring-net:
     driver: bridge
@@ -86,3 +109,4 @@ networks:
 volumes:
   postgres_data:
   prometheus_data:
+  alertmanager_data:

@@ -1,11 +1,161 @@
+# ==============================================================================
+# Enterprise Prometheus Alerting Rules - ITIL P1 / P2 / P3 / P4 Matrix
+# ==============================================================================
+
 groups:
-  - name: initial_rules
+  # ----------------------------------------------------------------------------
+  # Group 1: Infrastructure & Service Availability (P1 Critical)
+  # ----------------------------------------------------------------------------
+  - name: availability_alerts
     rules:
-      - alert: MonitoringSystemUp
-        expr: up == 1
+      - alert: HostDown
+        expr: up == 0
         for: 1m
         labels:
-          severity: info
-          priority: P4
+          severity: critical
+          priority: P1
+          target_type: host
         annotations:
-          summary: "Monitoring target is UP and actively reporting metrics"
+          summary: "Host {{ $labels.instance }} is DOWN / Unreachable"
+          description: "Target host {{ $labels.instance }} has failed scrape checks for more than 1 minute."
+          runbook_url: "runbooks/server_down_sop.md"
+
+      - alert: WebsiteDown
+        expr: probe_success == 0
+        for: 1m
+        labels:
+          severity: critical
+          priority: P1
+          target_type: website
+        annotations:
+          summary: "Monitored URL / Website {{ $labels.instance }} is DOWN"
+          description: "Synthetic HTTP check for {{ $labels.instance }} failed (probe_success == 0)."
+          runbook_url: "runbooks/website_down_sop.md"
+
+      - alert: EndpointHighLatency
+        expr: probe_duration_seconds > 1.5
+        for: 2m
+        labels:
+          severity: warning
+          priority: P3
+          target_type: website
+        annotations:
+          summary: "High Latency on {{ $labels.instance }}"
+          description: "Synthetic HTTP response latency on {{ $labels.instance }} is {{ $value | humanizeDuration }} (threshold: > 1.5s)."
+          runbook_url: "runbooks/slow_website_sop.md"
+
+  # ----------------------------------------------------------------------------
+  # Group 2: Host CPU Utilization & Load Alerts (P1 / P2 / P3)
+  # ----------------------------------------------------------------------------
+  - name: cpu_alerts
+    rules:
+      - alert: HostCpuUtilizationCritical
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 90
+        for: 3m
+        labels:
+          severity: critical
+          priority: P1
+          target_type: host
+        annotations:
+          summary: "Critical CPU Utilization > 90% on {{ $labels.instance }}"
+          description: "Host {{ $labels.instance }} CPU utilization is currently at {{ $value | printf \"%.2f\" }}% for over 3 minutes."
+          runbook_url: "runbooks/high_cpu_sop.md"
+
+      - alert: HostCpuUtilizationWarning
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          target_type: host
+        annotations:
+          summary: "High CPU Utilization > 80% on {{ $labels.instance }}"
+          description: "Host {{ $labels.instance }} CPU utilization is at {{ $value | printf \"%.2f\" }}%."
+          runbook_url: "runbooks/high_cpu_sop.md"
+
+      - alert: HostHighLoadAverage
+        expr: node_load1 > 4
+        for: 5m
+        labels:
+          severity: warning
+          priority: P3
+          target_type: host
+        annotations:
+          summary: "High 1-Minute Load Average on {{ $labels.instance }}"
+          description: "Host {{ $labels.instance }} 1-minute load average is {{ $value }} (threshold > 4.0)."
+          runbook_url: "runbooks/high_cpu_sop.md"
+
+  # ----------------------------------------------------------------------------
+  # Group 3: Host Memory Utilization Alerts (P1 / P2)
+  # ----------------------------------------------------------------------------
+  - name: memory_alerts
+    rules:
+      - alert: HostMemoryUtilizationCritical
+        expr: ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) > 92
+        for: 2m
+        labels:
+          severity: critical
+          priority: P1
+          target_type: host
+        annotations:
+          summary: "Critical Memory Exhaustion > 92% on {{ $labels.instance }}"
+          description: "Host {{ $labels.instance }} available RAM is below 8% (Used: {{ $value | printf \"%.2f\" }}%)."
+          runbook_url: "runbooks/high_memory_sop.md"
+
+      - alert: HostMemoryUtilizationWarning
+        expr: ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) > 85
+        for: 3m
+        labels:
+          severity: warning
+          priority: P2
+          target_type: host
+        annotations:
+          summary: "High Memory Utilization > 85% on {{ $labels.instance }}"
+          description: "Host {{ $labels.instance }} memory utilization is at {{ $value | printf \"%.2f\" }}%."
+          runbook_url: "runbooks/high_memory_sop.md"
+
+  # ----------------------------------------------------------------------------
+  # Group 4: Filesystem & Disk Space Alerts (P1 / P2)
+  # ----------------------------------------------------------------------------
+  - name: disk_alerts
+    rules:
+      - alert: HostDiskUtilizationCritical
+        expr: ((1 - (node_filesystem_free_bytes{fstype=~"ext4|xfs|ntfs|apfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs|ntfs|apfs"})) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          priority: P1
+          target_type: host
+        annotations:
+          summary: "Critical Disk Space Utilization > 95% on {{ $labels.instance }}"
+          description: "Filesystem mount {{ $labels.mountpoint }} on {{ $labels.instance }} is at {{ $value | printf \"%.2f\" }}% utilization."
+          runbook_url: "runbooks/high_disk_sop.md"
+
+      - alert: HostDiskUtilizationWarning
+        expr: ((1 - (node_filesystem_free_bytes{fstype=~"ext4|xfs|ntfs|apfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs|ntfs|apfs"})) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          target_type: host
+        annotations:
+          summary: "High Disk Space Utilization > 85% on {{ $labels.instance }}"
+          description: "Filesystem mount {{ $labels.mountpoint }} on {{ $labels.instance }} is at {{ $value | printf \"%.2f\" }}% utilization."
+          runbook_url: "runbooks/high_disk_sop.md"
+
+  # ----------------------------------------------------------------------------
+  # Group 5: Network Interface Health & Drop/Error Alerts (P3)
+  # ----------------------------------------------------------------------------
+  - name: network_alerts
+    rules:
+      - alert: HostNetworkInterfaceErrors
+        expr: (rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+          priority: P3
+          target_type: host
+        annotations:
+          summary: "High Network Packet Errors on {{ $labels.instance }}"
+          description: "Interface {{ $labels.device }} on {{ $labels.instance }} is observing packet errors at a rate of {{ $value }} errors/sec."
+          runbook_url: "runbooks/server_down_sop.md"
