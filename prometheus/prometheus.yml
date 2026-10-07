@@ -1,0 +1,78 @@
+# ==============================================================================
+# Prometheus Configuration - Enterprise Infrastructure Monitoring
+# ==============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Alert rule definitions
+rule_files:
+  - '/etc/prometheus/alert.rules.yml'
+
+# Scrape targets definition
+scrape_configs:
+  # 1. Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance_type: 'core-service'
+          tier: 'observability'
+
+  # 2. Host Metrics Monitoring (Linux / Server Infrastructure)
+  - job_name: 'node_exporter'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['node_exporter:9100']
+        labels:
+          instance: 'srv-linux-prod-01'
+          os_type: 'linux'
+          environment: 'production'
+          tier: 'compute'
+
+  # 3. Synthetic Blackbox Prober (Websites & APIs)
+  - job_name: 'blackbox_http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'http://backend:8000/health'
+        labels:
+          target_type: 'api'
+          environment: 'production'
+          service_name: 'Incident-Backend-API'
+      - targets:
+          - 'https://httpbin.org/status/200'
+        labels:
+          target_type: 'website'
+          environment: 'production'
+          service_name: 'Customer-Web-Portal'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'blackbox_exporter:9115'
+
+  # 4. Backend Application Performance Monitoring
+  - job_name: 'backend_api'
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          service: 'fastapi-backend'
+          environment: 'production'

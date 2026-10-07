@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # 1. PostgreSQL Database (Persistent datastore for inventory, incidents, RBAC)
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: eim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-monitoring_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password_replace_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-monitoring_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitoring-net
+
+  # ============================================================================
+  # 2. Prometheus Time-Series Monitoring Engine
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: eim-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - monitoring-net
+
+  # ============================================================================
+  # 3. Node Exporter (Infrastructure Host Metrics: CPU, Memory, Disk, Network)
+  # ============================================================================
+  node_exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: eim-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring-net
+
+  # ============================================================================
+  # 4. Blackbox Exporter (Synthetic HTTP, TCP, SSL & Ping Probing)
+  # ============================================================================
+  blackbox_exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: eim-blackbox-exporter
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    volumes:
+      - ./prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    ports:
+      - "9115:9115"
+    networks:
+      - monitoring-net
+
+networks:
+  monitoring-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:

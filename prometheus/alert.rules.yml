@@ -1,0 +1,11 @@
+groups:
+  - name: initial_rules
+    rules:
+      - alert: MonitoringSystemUp
+        expr: up == 1
+        for: 1m
+        labels:
+          severity: info
+          priority: P4
+        annotations:
+          summary: "Monitoring target is UP and actively reporting metrics"
