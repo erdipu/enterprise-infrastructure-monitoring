@@ -172,13 +172,15 @@ body {
 
 /* Data Tables */
 .table-noc {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-primary);
   color: var(--text-primary);
   vertical-align: middle;
 }
 
 .table-noc th {
-  background-color: #131c2e;
-  color: var(--text-secondary);
+  background-color: #131c2e !important;
+  color: #94a3b8 !important;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -187,13 +189,21 @@ body {
 }
 
 .table-noc td {
+  background-color: #172338 !important;
+  color: #f1f5f9 !important;
   border-bottom: 1px solid var(--border-color);
   padding: 12px 14px;
   font-size: 0.9rem;
 }
 
 .table-hover tbody tr:hover td {
-  background-color: #243247;
+  background-color: #243247 !important;
+}
+
+.hostname-highlight {
+  color: #38bdf8 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px;
 }
 
 /* Modal */

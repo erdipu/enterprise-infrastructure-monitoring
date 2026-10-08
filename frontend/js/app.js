@@ -116,7 +116,7 @@ async function loadDashboard() {
       data.top_alerting_systems.forEach(item => {
         tbody.innerHTML += `
           <tr>
-            <td class="fw-semibold text-light"><i class="bi bi-hdd-network me-2 text-primary"></i>${item.system}</td>
+            <td class="hostname-highlight"><i class="bi bi-hdd-network me-2 text-info"></i>${item.system}</td>
             <td class="text-warning fw-bold">${item.incidents}</td>
             <td><span class="badge ${item.incidents > 2 ? 'badge-p1' : 'badge-p3'}">Elevated Failure Rate</span></td>
           </tr>
@@ -149,7 +149,7 @@ async function loadServers() {
 
       tbody.innerHTML += `
         <tr>
-          <td class="fw-bold text-light">${s.hostname}</td>
+          <td class="hostname-highlight"><i class="bi bi-hdd-network me-2 text-info"></i>${s.hostname}</td>
           <td><code>${s.ip_address}</code></td>
           <td><i class="bi ${osIcon} me-1 text-info"></i>${s.os_type.toUpperCase()}</td>
           <td><span class="badge bg-dark border border-secondary">${s.environment}</span></td>
