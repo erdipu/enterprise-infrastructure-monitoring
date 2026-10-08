@@ -46,3 +46,61 @@ def delete_target(
     db.commit()
     return {"status": "success", "message": f"Target {target.name} deleted"}
 
+from pydantic import BaseModel
+import requests
+
+class HeartbeatPayload(BaseModel):
+    target_name: str
+    status: str  # "UP" or "DOWN"
+    response_time_ms: float = 0.0
+
+@router.post("/heartbeat")
+def receive_heartbeat(
+    payload: HeartbeatPayload,
+    db: Session = Depends(get_db)
+):
+    target = db.query(MonitoringTarget).filter(MonitoringTarget.name == payload.target_name).first()
+    if not target:
+        target = MonitoringTarget(
+            name=payload.target_name,
+            target_type="hardware",
+            url_or_host="192.168.1.7",
+            port=80,
+            check_interval_sec=15,
+            expected_status_code=200,
+            status=payload.status,
+            last_response_time_ms=payload.response_time_ms,
+            last_check=datetime.utcnow()
+        )
+        db.add(target)
+    else:
+        old_status = target.status
+        target.status = payload.status
+        target.last_response_time_ms = payload.response_time_ms
+        target.last_check = datetime.utcnow()
+
+        if payload.status == "DOWN" and old_status != "DOWN":
+            try:
+                requests.post(
+                    "http://alertmanager:9093/api/v2/alerts",
+                    json=[{
+                        "labels": {
+                            "alertname": "SecondaryRouterDown",
+                            "instance": "TP-Link_TL-WR845N (192.168.1.7)",
+                            "severity": "critical",
+                            "priority": "P1",
+                            "target_type": "router"
+                        },
+                        "annotations": {
+                            "summary": "Secondary Router TP-Link TL-WR845N is DOWN",
+                            "description": "Ping checks to 192.168.1.7 failed. Router powered off or LAN wire disconnected."
+                        }
+                    }],
+                    timeout=3
+                )
+            except Exception:
+                pass
+
+    db.commit()
+    return {"status": "success", "target": payload.target_name, "state": payload.status}
+
