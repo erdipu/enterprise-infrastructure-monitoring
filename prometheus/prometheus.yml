@@ -29,18 +29,18 @@ scrape_configs:
           instance_type: 'core-service'
           tier: 'observability'
 
-  # 2. Host Metrics Monitoring (Linux / Server Infrastructure)
+  # 2. Host Metrics Monitoring (Cloud Monitoring Server)
   - job_name: 'node_exporter'
     scrape_interval: 15s
     static_configs:
       - targets: ['node_exporter:9100']
         labels:
-          instance: 'srv-linux-prod-01'
+          instance: 'srv-monitoring-cloud'
           os_type: 'linux'
           environment: 'production'
           tier: 'compute'
 
-  # 3. Synthetic Blackbox Prober (Websites & APIs)
+  # 3. Synthetic Blackbox Prober (Monitored Websites & External Cloud Drive)
   - job_name: 'blackbox_http'
     metrics_path: /probe
     params:
@@ -54,11 +54,11 @@ scrape_configs:
           environment: 'production'
           service_name: 'Incident-Backend-API'
       - targets:
-          - 'https://httpbin.org/status/200'
+          - 'https://deepak-cloud-drive.duckdns.org'
         labels:
           target_type: 'website'
           environment: 'production'
-          service_name: 'Customer-Web-Portal'
+          service_name: 'Telegram-Cloud-Drive'
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -66,13 +66,3 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: 'blackbox_exporter:9115'
-
-  # 4. Backend Application Performance Monitoring
-  - job_name: 'backend_api'
-    metrics_path: /metrics
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['backend:8000']
-        labels:
-          service: 'fastapi-backend'
-          environment: 'production'
