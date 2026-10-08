@@ -29,9 +29,9 @@ class MetricsHandler(BaseHTTPRequestHandler):
         now = time.time()
         age = now - last_packet_time if last_packet_time > 0 else 999999
         # TP-Link sends DHCP syslog bursts roughly every 84 seconds.
-        # Router is considered ONLINE (1) if a packet arrived within the last 1200 seconds (20 mins).
+        # Router is considered ONLINE (1) if a packet arrived within the last 120 seconds (2 mins).
         # If no packet for > 150 seconds, router is truly powered OFF or cable unplugged (0).
-        is_up = 1 if (last_packet_time > 0 and age < 1200) else 0
+        is_up = 1 if (last_packet_time > 0 and age < 120) else 0
         latency_ms = 0.55 if is_up == 1 else 0.0
 
         metrics = (
