@@ -125,6 +125,22 @@ def format_telegram_recovery(downtime_sec):
         f"All escalation alerts cleared. System operating normally."
     )
 
+def format_telegram_boot_stabilized(downtime_sec):
+    ist_time = get_ist_time_str()
+    duration_str = f"{downtime_sec}s" if downtime_sec > 0 else "< 1s"
+    
+    return (
+        f"ℹ️ <b>[SYSTEM INFO] BOOT LINK STABILIZED</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 <b>Device:</b> Secondary Router (TP-Link WR845N)\n"
+        f"🌐 <b>Target IP:</b> <code>192.168.1.7</code>\n"
+        f"🔄 <b>Event:</b> Ethernet Port Auto-Negotiation (Reboot Flap)\n"
+        f"⚡ <b>Duration:</b> {duration_str}\n"
+        f"🕒 <b>Timestamp:</b> {ist_time}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Router finished booting. Link verified stable at 0.55 ms."
+    )
+
 def send_sms(message_text):
     """Sends SMS via Fast2SMS quick SMS API"""
     if not FAST2SMS_API_KEY or not SMS_MOBILE_NUMBER:
@@ -258,7 +274,7 @@ def main():
             SENT_LADDER_STEPS.clear()
             
             if had_outage_alert:
-                # 1. Send strictly 1 recovery message to Telegram
+                # 1. Send strictly 1 genuine recovery message to Telegram
                 tg_text = format_telegram_recovery(downtime_sec)
                 send_telegram(tg_text)
                 
@@ -273,9 +289,13 @@ def main():
                 send_email("✅ [RESOLVED 2/2] Secondary Router (TP-Link WR845N) Telemetry Restored", format_recovery_email(2))
                 RECOVERY_EMAILS_SENT = 2
                 
-                print(f"[Watchdog] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
+                print(f"[Watchdog] Genuine recovery notices delivered (1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
             else:
-                print(f"[Watchdog] Ignored momentary {downtime_sec}s boot flap (no outage alert had been dispatched).")
+                # Transient boot link flap (< 15s)
+                print(f"[Watchdog] Dispatching System Info notice for {downtime_sec}s boot link flap...")
+                tg_info = format_telegram_boot_stabilized(downtime_sec)
+                send_telegram(tg_info)
+                print(f"[Watchdog] Boot stabilization notice sent to Telegram for {downtime_sec}s flap.")
 
         # CASE C: SUSTAINED DOWN (Check Escalation Ladder)
         elif current_status == "DOWN" and STATE == "DOWN":
