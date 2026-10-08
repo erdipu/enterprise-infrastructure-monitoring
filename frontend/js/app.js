@@ -138,7 +138,7 @@ async function loadServers() {
     const tbody = document.getElementById("serversTableBody");
     tbody.innerHTML = "";
     if (servers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-secondary py-3">No registered servers.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="text-center text-secondary py-3">No registered servers. Click "+ Add Server" to register one.</td></tr>`;
       return;
     }
 
@@ -158,11 +158,59 @@ async function loadServers() {
           <td>${s.total_ram_gb} GB</td>
           <td>${s.total_disk_gb} GB</td>
           <td class="text-secondary small">${lastCheck}</td>
+          <td>
+            <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteServer(${s.id}, '${s.hostname}')" title="Delete Server">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
         </tr>
       `;
     });
   } catch (err) {
     console.error("Failed to load servers:", err);
+  }
+}
+
+// Synthetic Web & API Targets (UptimeRobot Style)
+async function loadTargets() {
+  try {
+    const res = await fetch(`${API_BASE}/targets/`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const targets = await res.json();
+
+    const tbody = document.getElementById("targetsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    if (targets.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-secondary py-3">No synthetic monitors registered. Click "+ Add URL / Website" above.</td></tr>`;
+      return;
+    }
+
+    targets.forEach(t => {
+      const statusBadge = t.status === "UP" ? "badge-up" : (t.status === "DOWN" ? "badge-down" : "badge-warning");
+      const typeBadge = t.target_type === "website" ? "bg-primary" : "bg-info text-dark";
+      const lastCheck = t.last_check ? new Date(t.last_check).toLocaleTimeString() : "--";
+      const latencyStr = t.last_response_time_ms ? `${parseFloat(t.last_response_time_ms).toFixed(1)} ms` : "--";
+
+      tbody.innerHTML += `
+        <tr>
+          <td class="hostname-highlight"><i class="bi bi-globe me-2 text-info"></i>${t.name}</td>
+          <td><code>${t.url_or_host}</code></td>
+          <td><span class="badge ${typeBadge}">${t.target_type.toUpperCase()}</span></td>
+          <td><span class="badge ${statusBadge}">${t.status}</span></td>
+          <td class="fw-semibold text-light">${latencyStr}</td>
+          <td>${t.check_interval_sec}s</td>
+          <td class="text-secondary small">${lastCheck}</td>
+          <td>
+            <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteTarget(${t.id}, '${t.name}')" title="Delete Monitor">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    });
+  } catch (err) {
+    console.error("Failed to load targets:", err);
   }
 }
 
@@ -374,6 +422,7 @@ function exportIncidentsCSV() {
 function refreshCurrentTab() {
   loadDashboard();
   loadServers();
+  loadTargets();
   loadAlerts();
   loadIncidents();
   loadReports();
@@ -384,4 +433,167 @@ function startAutoRefresh() {
   activePollingTimer = setInterval(() => {
     loadDashboard();
   }, 15000); // 15-second refresh interval
+}
+
+// ----------------------------------------------------------------------------
+// Dynamic Monitor Management (UptimeRobot Style)
+// ----------------------------------------------------------------------------
+
+function openAddMonitorModal(category = "website") {
+  const catSelect = document.getElementById("monitorCategory");
+  if (catSelect) catSelect.value = category;
+  toggleMonitorFormFields();
+  
+  document.getElementById("monitorName").value = "";
+  if (document.getElementById("monitorUrl")) document.getElementById("monitorUrl").value = "";
+  if (document.getElementById("serverIp")) document.getElementById("serverIp").value = "";
+
+  const modalEl = document.getElementById("addMonitorModal");
+  if (modalEl) {
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+}
+
+function toggleMonitorFormFields() {
+  const cat = document.getElementById("monitorCategory").value;
+  const webFields = document.getElementById("websiteFields");
+  const srvFields = document.getElementById("serverFields");
+
+  if (cat === "server") {
+    webFields.style.display = "none";
+    srvFields.style.display = "block";
+    document.getElementById("addMonitorModalTitle").innerHTML = '<i class="bi bi-hdd-network text-primary me-2"></i>Add Infrastructure Server';
+  } else {
+    webFields.style.display = "block";
+    srvFields.style.display = "none";
+    document.getElementById("addMonitorModalTitle").innerHTML = '<i class="bi bi-globe2 text-success me-2"></i>Add Synthetic URL / Website';
+  }
+}
+
+async function submitAddMonitor() {
+  const category = document.getElementById("monitorCategory").value;
+  const name = document.getElementById("monitorName").value.trim();
+
+  if (!name) {
+    alert("Please enter a monitor name");
+    return;
+  }
+
+  try {
+    if (category === "website") {
+      const url = document.getElementById("monitorUrl").value.trim();
+      const targetType = document.getElementById("monitorTargetType").value;
+      const interval = parseInt(document.getElementById("monitorInterval").value) || 15;
+
+      if (!url) {
+        alert("Please enter a valid URL (e.g. https://example.com)");
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/targets/`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: name,
+          target_type: targetType,
+          url_or_host: url,
+          port: url.startsWith("https") ? 443 : 80,
+          check_interval_sec: interval,
+          expected_status_code: 200,
+          status: "UP"
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Failed to create synthetic monitor");
+        return;
+      }
+    } else {
+      const ip = document.getElementById("serverIp").value.trim();
+      const os = document.getElementById("serverOs").value;
+      const env = document.getElementById("serverEnv").value;
+
+      if (!ip) {
+        alert("Please enter an IP address");
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/servers/`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          hostname: name,
+          ip_address: ip,
+          os_type: os,
+          environment: env,
+          status: "UP",
+          cpu_cores: 2,
+          total_ram_gb: 4.0,
+          total_disk_gb: 100.0
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Failed to create server");
+        return;
+      }
+    }
+
+    const modalEl = document.getElementById("addMonitorModal");
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    // Reload lists and dashboard stats
+    loadServers();
+    loadTargets();
+    loadDashboard();
+  } catch (err) {
+    console.error("Failed to add monitor:", err);
+    alert("An unexpected error occurred while adding the monitor.");
+  }
+}
+
+async function deleteServer(id, hostname) {
+  if (!confirm(`Are you sure you want to delete server '${hostname}'?`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/servers/${id}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+
+    if (!res.ok) {
+      alert("Failed to delete server");
+      return;
+    }
+
+    loadServers();
+    loadDashboard();
+  } catch (err) {
+    console.error("Error deleting server:", err);
+  }
+}
+
+async function deleteTarget(id, name) {
+  if (!confirm(`Are you sure you want to delete synthetic monitor '${name}'?`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/targets/${id}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+
+    if (!res.ok) {
+      alert("Failed to delete monitor");
+      return;
+    }
+
+    loadTargets();
+    loadDashboard();
+  } catch (err) {
+    console.error("Error deleting target:", err);
+  }
 }

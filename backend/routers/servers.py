@@ -52,3 +52,17 @@ def update_server(
     db.commit()
     db.refresh(server)
     return server
+
+@router.delete("/{server_id}")
+def delete_server(
+    server_id: int,
+    db: Session = Depends(get_db),
+    _user = Depends(require_roles(["admin", "operator"]))
+):
+    server = db.query(Server).filter(Server.id == server_id).first()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    db.delete(server)
+    db.commit()
+    return {"status": "success", "message": f"Server {server.hostname} deleted"}
+

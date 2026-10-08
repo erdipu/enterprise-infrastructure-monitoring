@@ -87,8 +87,8 @@
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="tab-servers" data-bs-toggle="pill" data-bs-target="#pane-servers" type="button" onclick="loadServers()">
-          <i class="bi bi-hdd-rack me-1"></i> Servers Inventory
+        <button class="nav-link" id="tab-servers" data-bs-toggle="pill" data-bs-target="#pane-servers" type="button" onclick="loadServers(); loadTargets();">
+          <i class="bi bi-hdd-rack me-1"></i> Monitors & Inventory
         </button>
       </li>
       <li class="nav-item" role="presentation">
@@ -224,10 +224,20 @@
 
       <!-- 2. SERVERS INVENTORY PANE -->
       <div class="tab-pane fade" id="pane-servers" role="tabpanel">
-        <div class="noc-card p-3">
+        
+        <!-- Host Infrastructure Inventory -->
+        <div class="noc-card p-3 mb-4">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold text-light mb-0"><i class="bi bi-hdd-network me-2"></i>Infrastructure Server Inventory</h5>
-            <span class="badge bg-secondary">Linux & Windows Targets</span>
+            <div>
+              <h5 class="fw-bold text-light mb-0"><i class="bi bi-hdd-network me-2"></i>Infrastructure Server Inventory</h5>
+              <div class="text-secondary small">Bare-metal and Virtual Cloud Instances</div>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+              <span class="badge bg-secondary">Linux & Windows Targets</span>
+              <button class="btn btn-primary btn-sm" onclick="openAddMonitorModal('server')">
+                <i class="bi bi-plus-circle me-1"></i> Add Server
+              </button>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="table table-noc table-hover mb-0">
@@ -242,14 +252,51 @@
                   <th>RAM (GB)</th>
                   <th>Disk (GB)</th>
                   <th>Last Scraped</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="serversTableBody">
-                <tr><td colspan="9" class="text-center text-secondary py-3">Loading server inventory...</td></tr>
+                <tr><td colspan="10" class="text-center text-secondary py-3">Loading server inventory...</td></tr>
               </tbody>
             </table>
           </div>
         </div>
+
+        <!-- Synthetic Web & URL Monitors (UptimeRobot Style) -->
+        <div class="noc-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h5 class="fw-bold text-light mb-0"><i class="bi bi-globe2 me-2"></i>Synthetic Web & API Monitors</h5>
+              <div class="text-secondary small">HTTP / HTTPS Availability, Uptime, and Latency Monitoring</div>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+              <span class="badge bg-info text-dark">URL Probes</span>
+              <button class="btn btn-success btn-sm" onclick="openAddMonitorModal('website')">
+                <i class="bi bi-plus-circle me-1"></i> Add URL / Website
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-noc table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Target Name</th>
+                  <th>URL / Endpoint</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Response Time</th>
+                  <th>Check Interval</th>
+                  <th>Last Probed</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="targetsTableBody">
+                <tr><td colspan="8" class="text-center text-secondary py-3">Loading synthetic monitors...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
 
       <!-- 3. PROMETHEUS ALERTS PANE -->
@@ -421,6 +468,93 @@
             </button>
           </div>
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  <!-- Add Monitor Modal (UptimeRobot Style) -->
+  <div class="modal fade" id="addMonitorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-content-noc">
+        <div class="modal-header modal-header-noc">
+          <h5 class="modal-title fw-bold" id="addMonitorModalTitle">
+            <i class="bi bi-plus-circle text-info me-2"></i>Add New Monitor
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="addMonitorForm" onsubmit="event.preventDefault(); submitAddMonitor();">
+            
+            <div class="mb-3">
+              <label class="form-label text-secondary small fw-semibold">Monitor Type</label>
+              <select id="monitorCategory" class="form-select bg-dark text-light border-secondary" onchange="toggleMonitorFormFields()">
+                <option value="website">🌐 Synthetic Website / URL (HTTP / HTTPS)</option>
+                <option value="server">🖥️ Infrastructure Server (Host / IP)</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label text-secondary small fw-semibold">Friendly Display Name</label>
+              <input type="text" id="monitorName" class="form-control bg-dark text-light border-secondary" placeholder="e.g. My Portfolio Website or Payment API" required>
+            </div>
+
+            <!-- Website / URL specific fields -->
+            <div id="websiteFields">
+              <div class="mb-3">
+                <label class="form-label text-secondary small fw-semibold">URL / Endpoint</label>
+                <input type="text" id="monitorUrl" class="form-control bg-dark text-light border-secondary" placeholder="https://example.com or http://1.2.3.4:8000">
+                <div class="form-text text-secondary small">Include http:// or https:// protocol.</div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label text-secondary small fw-semibold">Target Type</label>
+                  <select id="monitorTargetType" class="form-select bg-dark text-light border-secondary">
+                    <option value="website">Website</option>
+                    <option value="api">REST API</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label text-secondary small fw-semibold">Check Interval</label>
+                  <select id="monitorInterval" class="form-select bg-dark text-light border-secondary">
+                    <option value="15">Every 15s</option>
+                    <option value="30">Every 30s</option>
+                    <option value="60">Every 60s</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Server specific fields -->
+            <div id="serverFields" style="display: none;">
+              <div class="mb-3">
+                <label class="form-label text-secondary small fw-semibold">IP Address</label>
+                <input type="text" id="serverIp" class="form-control bg-dark text-light border-secondary" placeholder="e.g. 192.168.1.50 or 80.225.252.145">
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label text-secondary small fw-semibold">OS Type</label>
+                  <select id="serverOs" class="form-select bg-dark text-light border-secondary">
+                    <option value="linux">Linux</option>
+                    <option value="windows">Windows</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label text-secondary small fw-semibold">Environment</label>
+                  <select id="serverEnv" class="form-select bg-dark text-light border-secondary">
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-success btn-sm px-3">
+                <i class="bi bi-check2-circle me-1"></i> Save & Monitor
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

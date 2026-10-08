@@ -32,3 +32,17 @@ def create_target(
     db.commit()
     db.refresh(target)
     return target
+
+@router.delete("/{target_id}")
+def delete_target(
+    target_id: int,
+    db: Session = Depends(get_db),
+    _user = Depends(require_roles(["admin", "operator"]))
+):
+    target = db.query(MonitoringTarget).filter(MonitoringTarget.id == target_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    db.delete(target)
+    db.commit()
+    return {"status": "success", "message": f"Target {target.name} deleted"}
+
