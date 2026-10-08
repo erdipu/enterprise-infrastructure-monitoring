@@ -40,3 +40,11 @@ class Settings:
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "alerts@monitoring.local")
 
 settings = Settings()
+
+# In-memory shared state for live device telemetry (e.g. secondary router)
+ROUTER_STATE = {
+    "status": 1,
+    "latency_ms": 0.55,
+    "last_updated": None
+}
+

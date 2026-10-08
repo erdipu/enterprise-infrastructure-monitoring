@@ -1,0 +1,140 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "TP-Link Wireless Router (TL-WR845N) - Live Health & Network Telemetry",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Router Online Status",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "router_up", "refId": "A" }],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "color": "red", "text": "DISCONNECTED / DOWN" }, "1": { "color": "green", "text": "ONLINE (HEALTHY)" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Current Ping Latency",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "router_ping_latency_ms", "refId": "A" }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "fixedColor": "super-light-blue", "mode": "fixed" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "LAN Wire Stability / Uptime %",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "avg_over_time(router_up[1h]) * 100", "refId": "A" }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "color": { "fixedColor": "green", "mode": "fixed" }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "LAN IP & Network",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "vector(1)", "refId": "A" }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "1": { "color": "blue", "text": "192.168.1.7 (WR845N)" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Ping Latency (ms) Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "router_ping_latency_ms",
+          "legendFormat": "TP-Link TL-WR845N (192.168.1.7) Ping Latency",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15
+          },
+          "color": { "fixedColor": "cyan", "mode": "fixed" }
+        }
+      }
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["router", "network", "tp-link", "lan"],
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "15s", "30s", "1m"] },
+  "timezone": "browser",
+  "title": "Secondary Router (TP-Link WR845N) - Telemetry & Latency",
+  "uid": "tplink-router-telemetry",
+  "version": 1
+}

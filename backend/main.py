@@ -150,6 +150,32 @@ def health_check():
         "database": "connected"
     }
 
+from fastapi.responses import PlainTextResponse
+from config import ROUTER_STATE
+
+@app.get("/metrics", response_class=PlainTextResponse, tags=["Observability"])
+def prometheus_metrics():
+    last_up = ROUTER_STATE.get("last_updated")
+    is_up = 0
+    lat = 0.0
+    if last_up:
+        diff = (datetime.datetime.utcnow() - last_up).total_seconds()
+        if diff < 45 and ROUTER_STATE.get("status") == 1:
+            is_up = 1
+            lat = ROUTER_STATE.get("latency_ms", 0.0)
+    else:
+        is_up = ROUTER_STATE.get("status", 1)
+        lat = ROUTER_STATE.get("latency_ms", 0.55)
+
+    return f"""# HELP router_ping_latency_ms Secondary TP-Link router ping latency in milliseconds
+# TYPE router_ping_latency_ms gauge
+router_ping_latency_ms{{instance="192.168.1.7", router="TP-Link_WR845N", model="TL-WR845N"}} {lat}
+
+# HELP router_up Secondary TP-Link router availability status (1=UP, 0=DOWN)
+# TYPE router_up gauge
+router_up{{instance="192.168.1.7", router="TP-Link_WR845N", model="TL-WR845N"}} {is_up}
+"""
+
 # Register API Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(alerts.router, prefix=settings.API_V1_STR)

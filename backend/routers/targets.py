@@ -54,11 +54,17 @@ class HeartbeatPayload(BaseModel):
     status: str  # "UP" or "DOWN"
     response_time_ms: float = 0.0
 
+from config import ROUTER_STATE
+
 @router.post("/heartbeat")
 def receive_heartbeat(
     payload: HeartbeatPayload,
     db: Session = Depends(get_db)
 ):
+    ROUTER_STATE["status"] = 1 if payload.status == "UP" else 0
+    ROUTER_STATE["latency_ms"] = payload.response_time_ms
+    ROUTER_STATE["last_updated"] = datetime.utcnow()
+
     target = db.query(MonitoringTarget).filter(MonitoringTarget.name == payload.target_name).first()
     if not target:
         target = MonitoringTarget(
