@@ -5,13 +5,19 @@
 const API_BASE = "/api/v1";
 let currentIncident = null;
 let incidentModalInstance = null;
+let addMonitorModalInstance = null;
 let activePollingTimer = null;
 
 // On Page Load
 document.addEventListener("DOMContentLoaded", () => {
   const token = localStorage.getItem("noc_token");
   const username = localStorage.getItem("noc_username");
-  incidentModalInstance = new bootstrap.Modal(document.getElementById("incidentModal"));
+  
+  const incEl = document.getElementById("incidentModal");
+  if (incEl) incidentModalInstance = new bootstrap.Modal(incEl);
+
+  const addMonEl = document.getElementById("addMonitorModal");
+  if (addMonEl) addMonitorModalInstance = new bootstrap.Modal(addMonEl);
 
   if (token) {
     showAppView(username);
@@ -444,14 +450,21 @@ function openAddMonitorModal(category = "website") {
   if (catSelect) catSelect.value = category;
   toggleMonitorFormFields();
   
-  document.getElementById("monitorName").value = "";
-  if (document.getElementById("monitorUrl")) document.getElementById("monitorUrl").value = "";
-  if (document.getElementById("serverIp")) document.getElementById("serverIp").value = "";
+  const nameEl = document.getElementById("monitorName");
+  if (nameEl) nameEl.value = "";
+  const urlEl = document.getElementById("monitorUrl");
+  if (urlEl) urlEl.value = "";
+  const ipEl = document.getElementById("serverIp");
+  if (ipEl) ipEl.value = "";
 
-  const modalEl = document.getElementById("addMonitorModal");
-  if (modalEl) {
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
+  if (addMonitorModalInstance) {
+    addMonitorModalInstance.show();
+  } else {
+    const modalEl = document.getElementById("addMonitorModal");
+    if (modalEl) {
+      addMonitorModalInstance = new bootstrap.Modal(modalEl);
+      addMonitorModalInstance.show();
+    }
   }
 }
 
