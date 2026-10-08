@@ -3,39 +3,55 @@ import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-last_packet_time = 0
-packet_count = 0
+tplink_last_packet_time = 0
+tplink_packet_count = 0
 last_sender_ip = 'none'
 
 def syslog_listener():
-    global last_packet_time, packet_count, last_sender_ip
+    global tplink_last_packet_time, tplink_packet_count, last_sender_ip
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(('0.0.0.0', 514))
     print('Syslog UDP listener running on 514...')
     while True:
         try:
             data, addr = sock.recvfrom(2048)
-            last_packet_time = time.time()
-            packet_count += 1
-            last_sender_ip = addr[0]
+            msg = data.decode(errors="ignore").strip()
+            
+            # Check if this packet originated specifically from the TP-Link Secondary Router
+            # TP-Link WR845N syslog messages contain DHCPC / DHCPD / TP-Link signatures
+            is_tplink = (
+                "DHCPC" in msg or 
+                "DHCPD" in msg or 
+                "TP-Link" in msg or 
+                "WR845N" in msg or 
+                "HomeRouter" in msg
+            )
+            
+            if is_tplink:
+                tplink_last_packet_time = time.time()
+                tplink_packet_count += 1
+                last_sender_ip = addr[0]
+            
             with open('/var/log/router_telemetry.log', 'a') as f:
-                f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} [{addr[0]}] {data.decode(errors="ignore").strip()}\n')
+                f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} [{addr[0]}] {msg}\n')
         except Exception as e:
             time.sleep(1)
 
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global last_packet_time, packet_count, last_sender_ip
+        global tplink_last_packet_time, tplink_packet_count, last_sender_ip
         now = time.time()
-        age = now - last_packet_time if last_packet_time > 0 else 999999
-        # Router is considered ONLINE (1) if packet arrived within last 120 seconds (2 mins)
-        is_up = 1 if (last_packet_time > 0 and age < 120) else 0
+        age = now - tplink_last_packet_time if tplink_last_packet_time > 0 else 999999
+        # STRICTLY SECONDARY ROUTER:
+        # Considered ONLINE (1) if a packet from the TP-Link router arrived within last 180 seconds.
+        # If the TP-Link router is unplugged / powered off for > 180 seconds, drops to 0 (DOWN).
+        is_up = 1 if (tplink_last_packet_time > 0 and age < 180) else 0
         latency_ms = 0.55 if is_up == 1 else 0.0
 
         metrics = (
             f'# HELP router_syslog_alive Router heartbeat indicator (1=up, 0=down)\n'
             f'# TYPE router_syslog_alive gauge\n'
-            f'router_syslog_alive{{target="Home_Gateway",sender="{last_sender_ip}"}} {is_up}\n\n'
+            f'router_syslog_alive{{target="TP-Link_WR845N",sender="{last_sender_ip}"}} {is_up}\n\n'
             f'# HELP router_up Router availability indicator for Grafana\n'
             f'# TYPE router_up gauge\n'
             f'router_up{{instance="192.168.1.7",router="TP-Link_WR845N",model="TL-WR845N"}} {is_up}\n\n'
@@ -44,10 +60,10 @@ class MetricsHandler(BaseHTTPRequestHandler):
             f'router_ping_latency_ms{{instance="192.168.1.7",router="TP-Link_WR845N",model="TL-WR845N"}} {latency_ms}\n\n'
             f'# HELP router_syslog_last_seen_seconds Seconds since last received syslog packet\n'
             f'# TYPE router_syslog_last_seen_seconds gauge\n'
-            f'router_syslog_last_seen_seconds{{target="Home_Gateway"}} {age:.1f}\n\n'
+            f'router_syslog_last_seen_seconds{{target="TP-Link_WR845N"}} {age:.1f}\n\n'
             f'# HELP router_syslog_packets_total Total count of syslog packets received\n'
             f'# TYPE router_syslog_packets_total counter\n'
-            f'router_syslog_packets_total{{target="Home_Gateway"}} {packet_count}\n'
+            f'router_syslog_packets_total{{target="TP-Link_WR845N"}} {tplink_packet_count}\n'
         )
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain; version=0.0.4')
