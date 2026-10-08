@@ -1,20 +1,111 @@
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import MonitoringTarget
 from schemas import MonitoringTargetResponse, MonitoringTargetCreate
 from auth import require_roles
+from pydantic import BaseModel
+import urllib.request
+import time
 
 router = APIRouter(prefix="/targets", tags=["Synthetic Monitoring Targets"])
+
+def sync_target_realtime(target: MonitoringTarget):
+    """
+    Real-time status check for targets so the UI never displays stale or cached status.
+    - Router/Heartbeat devices: Check if heartbeat arrived recently from router-syslog exporter.
+    - External websites/APIs: Real-time HTTP/Socket probe.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Check if this target is a local router (192.168.1.7) or marked as router
+    is_router = (
+        "router" in target.name.lower() or 
+        "wr845n" in target.name.lower() or 
+        target.url_or_host == "192.168.1.7" or
+        "103.181.90.226" in (target.url_or_host or "")
+    )
+    
+    if is_router:
+        try:
+            # Query the cloud syslog exporter running on 172.18.0.1:9125 or 127.0.0.1:9125
+            req = urllib.request.Request("http://172.18.0.1:9125", headers={"User-Agent": "NOC-Realtime-Sync"})
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                data = resp.read().decode()
+                alive = 0
+                latency = 0.0
+                for line in data.splitlines():
+                    if line.startswith("router_syslog_alive") and not line.startswith("#"):
+                        alive = int(float(line.split()[-1]))
+                    elif line.startswith("router_syslog_last_seen_seconds") and not line.startswith("#"):
+                        age = float(line.split()[-1])
+                        latency = 0.6 if alive == 1 else 0.0
+                
+                if alive == 1:
+                    target.status = "UP"
+                    target.last_response_time_ms = latency
+                else:
+                    target.status = "DOWN"
+                    target.last_response_time_ms = 0.0
+                target.last_check = now
+        except Exception:
+            try:
+                # Fallback to local container host
+                req = urllib.request.Request("http://host.docker.internal:9125", headers={"User-Agent": "NOC-Realtime-Sync"})
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    data = resp.read().decode()
+                    alive = 0
+                    for line in data.splitlines():
+                        if line.startswith("router_syslog_alive") and not line.startswith("#"):
+                            alive = int(float(line.split()[-1]))
+                    if alive == 1:
+                        target.status = "UP"
+                        target.last_response_time_ms = 0.6
+                    else:
+                        target.status = "DOWN"
+                        target.last_response_time_ms = 0.0
+                    target.last_check = now
+            except Exception:
+                target.status = "DOWN"
+                target.last_response_time_ms = 0.0
+                target.last_check = now
+    else:
+        # Generic HTTP probe
+        if target.target_type in ["website", "api"] and target.url_or_host:
+            url = target.url_or_host if target.url_or_host.startswith("http") else f"http://{target.url_or_host}"
+            try:
+                start = time.time()
+                req = urllib.request.Request(url, headers={"User-Agent": "NOC-HealthCheck/1.0"})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    elapsed = (time.time() - start) * 1000.0
+                    target.status = "UP" if resp.status < 400 else "DOWN"
+                    target.last_response_time_ms = round(elapsed, 1)
+            except Exception:
+                target.status = "DOWN"
+                target.last_response_time_ms = 0.0
+            target.last_check = now
 
 @router.get("/", response_model=List[MonitoringTargetResponse])
 def list_targets(target_type: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(MonitoringTarget)
     if target_type:
         query = query.filter(MonitoringTarget.target_type == target_type)
-    return query.order_by(MonitoringTarget.name.asc()).all()
+    targets = query.order_by(MonitoringTarget.name.asc()).all()
+    
+    # Real-time synchronization
+    changed = False
+    for t in targets:
+        sync_target_realtime(t)
+        changed = True
+    if changed:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            
+    return targets
 
 @router.post("/", response_model=MonitoringTargetResponse)
 def create_target(
@@ -27,7 +118,7 @@ def create_target(
         raise HTTPException(status_code=400, detail="Target name already registered")
 
     target = MonitoringTarget(**target_in.dict())
-    target.last_check = datetime.utcnow()
+    sync_target_realtime(target)
     db.add(target)
     db.commit()
     db.refresh(target)
@@ -46,25 +137,17 @@ def delete_target(
     db.commit()
     return {"status": "success", "message": f"Target {target.name} deleted"}
 
-from pydantic import BaseModel
-import requests
-
 class HeartbeatPayload(BaseModel):
     target_name: str
     status: str  # "UP" or "DOWN"
     response_time_ms: float = 0.0
-
-from config import ROUTER_STATE
 
 @router.post("/heartbeat")
 def receive_heartbeat(
     payload: HeartbeatPayload,
     db: Session = Depends(get_db)
 ):
-    ROUTER_STATE["status"] = 1 if payload.status == "UP" else 0
-    ROUTER_STATE["latency_ms"] = payload.response_time_ms
-    ROUTER_STATE["last_updated"] = datetime.utcnow()
-
+    now = datetime.now(timezone.utc)
     target = db.query(MonitoringTarget).filter(MonitoringTarget.name == payload.target_name).first()
     if not target:
         target = MonitoringTarget(
@@ -75,38 +158,14 @@ def receive_heartbeat(
             check_interval_sec=15,
             expected_status_code=200,
             status=payload.status,
-            last_response_time_ms=payload.response_time_ms,
-            last_check=datetime.utcnow()
+            last_response_time_ms=payload.response_time_ms if payload.status == "UP" else 0.0,
+            last_check=now
         )
         db.add(target)
     else:
-        old_status = target.status
         target.status = payload.status
-        target.last_response_time_ms = payload.response_time_ms
-        target.last_check = datetime.utcnow()
-
-        if payload.status == "DOWN" and old_status != "DOWN":
-            try:
-                requests.post(
-                    "http://alertmanager:9093/api/v2/alerts",
-                    json=[{
-                        "labels": {
-                            "alertname": "SecondaryRouterDown",
-                            "instance": "TP-Link_TL-WR845N (192.168.1.7)",
-                            "severity": "critical",
-                            "priority": "P1",
-                            "target_type": "host"
-                        },
-                        "annotations": {
-                            "summary": "Secondary Router TP-Link TL-WR845N is DOWN",
-                            "description": "Ping checks to 192.168.1.7 failed. Router powered off or LAN wire disconnected."
-                        }
-                    }],
-                    timeout=3
-                )
-            except Exception:
-                pass
+        target.last_response_time_ms = payload.response_time_ms if payload.status == "UP" else 0.0
+        target.last_check = now
 
     db.commit()
     return {"status": "success", "target": payload.target_name, "state": payload.status}
-

@@ -20,6 +20,18 @@ groups:
           description: "Target host {{ $labels.instance }} has failed scrape checks for more than 1 minute."
           runbook_url: "runbooks/server_down_sop.md"
 
+      - alert: RouterDown
+        expr: router_syslog_alive == 0
+        for: 30s
+        labels:
+          severity: critical
+          priority: P1
+          target_type: router
+        annotations:
+          summary: "Secondary Router (TP-Link WR845N) is DOWN"
+          description: "No heartbeat/syslog packet received from secondary router for more than 30s."
+          runbook_url: "runbooks/server_down_sop.md"
+
       - alert: WebsiteDown
         expr: probe_success == 0
         for: 1m

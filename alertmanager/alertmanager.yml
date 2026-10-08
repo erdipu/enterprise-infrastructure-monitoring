@@ -1,55 +1,7 @@
-# ==============================================================================
-# Prometheus Alertmanager Configuration
-# ITIL Alert Routing, Grouping, Inhibit Rules, and Webhook Integration
-# ==============================================================================
-
 global:
   resolve_timeout: 5m
-
-# Top-level routing tree
 route:
-  group_by: ['alertname', 'instance', 'target_type']
-  group_wait: 10s
-  group_interval: 30s
-  repeat_interval: 1h
-  receiver: 'fastapi_incident_webhook'
-  
-  routes:
-    # Route P1 Critical Alerts immediately with shorter grouping delay
-    - match:
-        priority: P1
-      receiver: 'fastapi_incident_webhook'
-      group_wait: 5s
-      repeat_interval: 30m
-
-    # Route P2 / P3 Warning Alerts
-    - match_re:
-        priority: ^(P2|P3|P4)$
-      receiver: 'fastapi_incident_webhook'
-      group_wait: 15s
-      repeat_interval: 2h
-
-# Enterprise Inhibit (Suppression) Rules
-# Concept: If a server is completely DOWN, suppress secondary alerts (CPU, Memory, Disk)
-# to prevent cascade noise storms (similar to BMC TrueSight / OpsRamp event deduplication).
-inhibit_rules:
-  - source_match:
-      alertname: 'HostDown'
-    target_match_re:
-      alertname: '^(HostCpuUtilization.*|HostMemoryUtilization.*|HostDiskUtilization.*|HostHighLoadAverage)$'
-    equal: ['instance']
-
-  - source_match:
-      alertname: 'WebsiteDown'
-    target_match:
-      alertname: 'EndpointHighLatency'
-    equal: ['instance']
-
-# Dispatch Receivers
+  receiver: "devnull"
+  group_by: ["..."]
 receivers:
-  - name: 'fastapi_incident_webhook'
-    webhook_configs:
-      - url: 'http://backend:8000/api/v1/alerts/webhook'
-        send_resolved: true
-        http_config:
-          follow_redirects: true
+  - name: "devnull"

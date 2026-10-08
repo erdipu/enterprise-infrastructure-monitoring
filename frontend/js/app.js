@@ -196,7 +196,7 @@ async function loadTargets() {
       const statusBadge = t.status === "UP" ? "badge-up" : (t.status === "DOWN" ? "badge-down" : "badge-warning");
       const typeBadge = t.target_type === "website" ? "bg-primary" : "bg-info text-dark";
       const lastCheck = t.last_check ? new Date(t.last_check).toLocaleTimeString() : "--";
-      const latencyStr = t.last_response_time_ms ? `${parseFloat(t.last_response_time_ms).toFixed(1)} ms` : "--";
+      const latencyStr = (t.status === "UP" && t.last_response_time_ms && t.last_response_time_ms > 0) ? `${parseFloat(t.last_response_time_ms).toFixed(1)} ms` : "<span class=\"text-danger fw-bold\">0 ms (Timeout)</span>";
 
       tbody.innerHTML += `
         <tr>
