@@ -234,7 +234,7 @@
             </div>
             <div class="d-flex gap-2 align-items-center">
               <span class="badge bg-secondary">Linux & Windows Targets</span>
-              <button class="btn btn-primary btn-sm" onclick="openAddMonitorModal('server')">
+              <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addMonitorModal" onclick="openAddMonitorModal('server')">
                 <i class="bi bi-plus-circle me-1"></i> Add Server
               </button>
             </div>
@@ -271,7 +271,7 @@
             </div>
             <div class="d-flex gap-2 align-items-center">
               <span class="badge bg-info text-dark">URL Probes</span>
-              <button class="btn btn-success btn-sm" onclick="openAddMonitorModal('website')">
+              <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addMonitorModal" onclick="openAddMonitorModal('website')">
                 <i class="bi bi-plus-circle me-1"></i> Add URL / Website
               </button>
             </div>
@@ -471,6 +471,8 @@
         </div>
       </div>
     </div>
+  </div>
+
   <!-- Add Monitor Modal (UptimeRobot Style) -->
   <div class="modal fade" id="addMonitorModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
