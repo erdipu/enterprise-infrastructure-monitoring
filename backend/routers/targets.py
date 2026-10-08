@@ -63,7 +63,7 @@ def receive_heartbeat(
     if not target:
         target = MonitoringTarget(
             name=payload.target_name,
-            target_type="hardware",
+            target_type="host",
             url_or_host="192.168.1.7",
             port=80,
             check_interval_sec=15,
@@ -89,7 +89,7 @@ def receive_heartbeat(
                             "instance": "TP-Link_TL-WR845N (192.168.1.7)",
                             "severity": "critical",
                             "priority": "P1",
-                            "target_type": "router"
+                            "target_type": "host"
                         },
                         "annotations": {
                             "summary": "Secondary Router TP-Link TL-WR845N is DOWN",
