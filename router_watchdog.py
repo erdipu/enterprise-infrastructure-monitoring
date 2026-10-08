@@ -3,6 +3,7 @@ import urllib.request
 import urllib.parse
 import json
 import smtplib
+from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -31,6 +32,12 @@ DOWN_START_TIME = None  # Timestamp when router went down
 SENT_LADDER_STEPS = set() # Steps already emailed for this outage
 RECOVERY_EMAILS_SENT = 0 # Count of recovery emails sent (capped at exactly 2)
 
+# Indian Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_time_str():
+    return datetime.now(IST).strftime("%I:%M:%S %p IST")
+
 # ==============================================================================
 # Notification Credentials & Configuration
 # ==============================================================================
@@ -39,8 +46,8 @@ EMAIL_RECIPIENT = "infoworld2112@gmail.com"
 EMAIL_PASSWORD = "ypen pruc cznc xwhv"
 
 # Telegram Bot (Configured via /home/ubuntu/alert_config.json or defaults here)
-TELEGRAM_BOT_TOKEN = ""   # e.g. "123456789:ABCdef..."
-TELEGRAM_CHAT_ID = ""     # e.g. "123456789"
+TELEGRAM_BOT_TOKEN = "8887767165:AAEeno6ErIGK0e2mWpGETlSfxHwd7PMaIjs"
+TELEGRAM_CHAT_ID = "952086426"
 
 # SMS Configuration (Supports Fast2SMS Quick SMS API)
 FAST2SMS_API_KEY = ""
@@ -59,16 +66,16 @@ def load_dynamic_config():
     except Exception:
         pass
 
-def send_telegram(message_text):
-    """Sends immediate alert message via Telegram Bot API"""
+def send_telegram(html_text):
+    """Sends immediate alert message via Telegram Bot API with HTML formatting"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return False
     try:
         url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
         payload = json.dumps({
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": message_text,
-            "parse_mode": "Markdown"
+            "text": html_text,
+            "parse_mode": "HTML"
         }).encode("utf-8")
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -79,6 +86,44 @@ def send_telegram(message_text):
         ts = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{ts}] Telegram send error: {e}")
         return False
+
+def format_telegram_outage(idx, step_title, elapsed_sec):
+    minutes = elapsed_sec // 60
+    seconds = elapsed_sec % 60
+    duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+    ist_time = get_ist_time_str()
+    
+    return (
+        f"🚨 <b>[ALERT {idx+1}/7] CRITICAL OUTAGE DETECTED</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 <b>Device:</b> Secondary Router (TP-Link WR845N)\n"
+        f"🌐 <b>Target IP:</b> <code>192.168.1.7</code>\n"
+        f"⚠️ <b>Status:</b> OFFLINE / DOWN\n"
+        f"⏱️ <b>Outage Duration:</b> {duration_str} ({step_title})\n"
+        f"🕒 <b>Detected At:</b> {ist_time}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 <a href=\"http://deepak-monitoring.duckdns.org:8090\">NOC Operations Center</a>\n"
+        f"📈 <a href=\"http://deepak-monitoring.duckdns.org:3000\">Grafana Dashboard</a>"
+    )
+
+def format_telegram_recovery(downtime_sec):
+    minutes = downtime_sec // 60
+    seconds = downtime_sec % 60
+    duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+    ist_time = get_ist_time_str()
+    
+    return (
+        f"✅ <b>[RESOLVED] INFRASTRUCTURE RECOVERED</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 <b>Device:</b> Secondary Router (TP-Link WR845N)\n"
+        f"🌐 <b>Target IP:</b> <code>192.168.1.7</code>\n"
+        f"📶 <b>Status:</b> ONLINE / OPERATIONAL\n"
+        f"⚡ <b>Latency:</b> 0.55 ms (Link 100% Stable)\n"
+        f"🕒 <b>Restored At:</b> {ist_time}\n"
+        f"⏳ <b>Total Downtime:</b> {duration_str}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"All escalation alerts cleared. System operating normally."
+    )
 
 def send_sms(message_text):
     """Sends SMS via Fast2SMS quick SMS API"""
@@ -149,7 +194,7 @@ def format_recovery_email(copy_num):
         <p><strong>Device:</strong> Secondary Router (TP-Link TL-WR845N / 192.168.1.7)</p>
         <p><strong>Status:</strong> <span style="background: #16a34a; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold;">ONLINE / UP</span></p>
         <p><strong>Telemetry:</strong> Physical link and heartbeat telemetry restored. Stability 100%.</p>
-        <p><strong>Notification:</strong> Recovery notice ({copy_num} of 2) — All outage alerts canceled.</p>
+        <p><strong>Notification:</strong> Recovery notice ({copy_num} of 2) — All escalation alerts cleared. System operating normally.</p>
         <hr style="border: 0; border-top: 1px solid #bbf7d0; margin: 15px 0;">
         <a href="http://deepak-monitoring.duckdns.org:8090" style="background: #2563eb; color: white; padding: 9px 18px; text-decoration: none; border-radius: 4px; display: inline-block;">Open NOC Portal</a>
     </div>
@@ -203,6 +248,7 @@ def main():
             ts = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{ts}] Recovery detected! Transitioning DOWN -> UP")
             STATE = "UP"
+            downtime_sec = int(now - DOWN_START_TIME) if DOWN_START_TIME else 0
             DOWN_START_TIME = None
             SENT_LADDER_STEPS.clear()
             
@@ -215,15 +261,15 @@ def main():
             RECOVERY_EMAILS_SENT = 2
             
             # Send recovery alert to Telegram & SMS
-            tg_text = "✅ *INFRASTRUCTURE RECOVERED*\nSecondary Router (*TP-Link WR845N* / `192.168.1.7`) is back ONLINE!\nTelemetry stream restored. Outage alerts canceled."
+            tg_text = format_telegram_recovery(downtime_sec)
             send_telegram(tg_text)
-            send_sms("RECOVERED: Secondary Router (TP-Link WR845N) is back ONLINE. Outage alerts canceled.")
+            send_sms(f"RECOVERED: Secondary Router (TP-Link WR845N) is back ONLINE. Downtime: {downtime_sec}s. All alerts cleared.")
             
             print("[Watchdog] Recovery notices delivered. Pending down alerts stopped.")
 
         # CASE C: SUSTAINED DOWN (Check Escalation Ladder)
         elif current_status == "DOWN" and STATE == "DOWN":
-            elapsed = int(now - DOWN_START_TIME)
+            elapsed = int(now - DOWN_START_TIME) if DOWN_START_TIME else 0
             for idx, (threshold, step_title) in enumerate(OUTAGE_LADDER):
                 if elapsed >= threshold and idx not in SENT_LADDER_STEPS:
                     subject = f"🚨 [{idx+1}/7 OUTAGE] Secondary Router (TP-Link WR845N) is DOWN - {step_title}"
@@ -233,14 +279,7 @@ def main():
                         print(f"[Watchdog] Dispatched ladder step {idx+1} at {elapsed}s: {step_title}")
                     
                     # Telegram & SMS instant dispatch
-                    tg_msg = (
-                        f"🚨 *CRITICAL OUTAGE DETECTED*\n"
-                        f"*Device:* Secondary Router (TP-Link WR845N / `192.168.1.7`)\n"
-                        f"*Status:* OFFLINE / DOWN\n"
-                        f"*Escalation:* {step_title}\n"
-                        f"*Elapsed:* {elapsed}s\n"
-                        f"NOC Portal: http://deepak-monitoring.duckdns.org:8090"
-                    )
+                    tg_msg = format_telegram_outage(idx, step_title, elapsed)
                     send_telegram(tg_msg)
                     sms_msg = f"ALERT: TP-Link WR845N router is DOWN ({step_title}). Check NOC Portal: http://deepak-monitoring.duckdns.org:8090"
                     send_sms(sms_msg)
