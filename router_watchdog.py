@@ -249,23 +249,33 @@ def main():
             print(f"[{ts}] Recovery detected! Transitioning DOWN -> UP")
             STATE = "UP"
             downtime_sec = int(now - DOWN_START_TIME) if DOWN_START_TIME else 0
+            
+            # Check if this was a genuine outage where down alerts were actually dispatched
+            # (i.e. outage lasted >= 15 seconds or any ladder alert was sent)
+            had_outage_alert = (len(SENT_LADDER_STEPS) > 0 or downtime_sec >= 15)
+            
             DOWN_START_TIME = None
             SENT_LADDER_STEPS.clear()
             
-            # Send exactly 2 recovery emails and stop
-            print("[Watchdog] Sending Recovery Email 1 of 2...")
-            send_email("✅ [RESOLVED 1/2] Secondary Router (TP-Link WR845N) Back Online", format_recovery_email(1))
-            time.sleep(3)
-            print("[Watchdog] Sending Recovery Email 2 of 2...")
-            send_email("✅ [RESOLVED 2/2] Secondary Router (TP-Link WR845N) Telemetry Restored", format_recovery_email(2))
-            RECOVERY_EMAILS_SENT = 2
-            
-            # Send recovery alert to Telegram & SMS
-            tg_text = format_telegram_recovery(downtime_sec)
-            send_telegram(tg_text)
-            send_sms(f"RECOVERED: Secondary Router (TP-Link WR845N) is back ONLINE. Downtime: {downtime_sec}s. All alerts cleared.")
-            
-            print("[Watchdog] Recovery notices delivered. Pending down alerts stopped.")
+            if had_outage_alert:
+                # 1. Send strictly 1 recovery message to Telegram
+                tg_text = format_telegram_recovery(downtime_sec)
+                send_telegram(tg_text)
+                
+                # 2. Send recovery SMS
+                send_sms(f"RECOVERED: Secondary Router (TP-Link WR845N) is back ONLINE. Downtime: {downtime_sec}s. All alerts cleared.")
+                
+                # 3. Send strictly 2 recovery emails
+                print("[Watchdog] Sending Recovery Email 1 of 2...")
+                send_email("✅ [RESOLVED 1/2] Secondary Router (TP-Link WR845N) Back Online", format_recovery_email(1))
+                time.sleep(3)
+                print("[Watchdog] Sending Recovery Email 2 of 2...")
+                send_email("✅ [RESOLVED 2/2] Secondary Router (TP-Link WR845N) Telemetry Restored", format_recovery_email(2))
+                RECOVERY_EMAILS_SENT = 2
+                
+                print(f"[Watchdog] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
+            else:
+                print(f"[Watchdog] Ignored momentary {downtime_sec}s boot flap (no outage alert had been dispatched).")
 
         # CASE C: SUSTAINED DOWN (Check Escalation Ladder)
         elif current_status == "DOWN" and STATE == "DOWN":
