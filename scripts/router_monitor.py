@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Enterprise Router Heartbeat Agent
+Enterprise Router Heartbeat Agent (Zero Dependency - uses Python standard library)
 Pings secondary TP-Link router (192.168.1.7) and sends live telemetry to the Cloud Monitoring Platform.
 If the LAN cable is disconnected or the router loses power, triggers an immediate P1 alert and email.
 """
 
 import time
 import subprocess
-import requests
+import json
+import urllib.request
+import urllib.error
 import sys
 
 ROUTER_IP = "192.168.1.7"
@@ -22,7 +24,6 @@ def ping_router(ip: str):
         cmd = ["ping", "-c", "1", "-W", "1000", ip]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
         if res.returncode == 0:
-            # Extract latency from ping output
             for line in res.stdout.splitlines():
                 if "time=" in line:
                     parts = line.split("time=")[1].split()
@@ -33,10 +34,28 @@ def ping_router(ip: str):
     except Exception:
         return False, 0.0
 
+def send_heartbeat(status: str, latency: float):
+    payload = json.dumps({
+        "target_name": TARGET_NAME,
+        "status": status,
+        "response_time_ms": latency
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        CLOUD_HEARTBEAT_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=5) as response:
+        return response.status
+
 def main():
-    print(f"[*] Starting Secondary Router Monitor for {TARGET_NAME} at {ROUTER_IP}")
-    print(f"[*] Telemetry reporting to: {CLOUD_HEARTBEAT_URL}")
-    print("[*] Press Ctrl+C to stop.\n")
+    print(f"============================================================")
+    print(f"[*] Enterprise Secondary Router Monitor (TL-WR845N)")
+    print(f"[*] Target IP: {ROUTER_IP}")
+    print(f"[*] Cloud Ingestion: {CLOUD_HEARTBEAT_URL}")
+    print(f"[*] Press Ctrl+C to terminate.")
+    print(f"============================================================\n")
 
     consecutive_failures = 0
 
@@ -46,23 +65,17 @@ def main():
 
         if not is_up:
             consecutive_failures += 1
-            print(f"[!] ALERT: TP-Link Router {ROUTER_IP} is UNREACHABLE! (Failure count: {consecutive_failures})")
+            print(f"[!] OUTAGE DETECTED: TP-Link Router {ROUTER_IP} is DOWN! (Failure: {consecutive_failures})")
         else:
             consecutive_failures = 0
-            print(f"[+] TP-Link Router {ROUTER_IP} is UP | Latency: {latency_ms:.2f} ms")
+            print(f"[+] TP-Link Router {ROUTER_IP} is HEALTHY | Latency: {latency_ms:.2f} ms")
 
-        # Report to cloud
         try:
-            payload = {
-                "target_name": TARGET_NAME,
-                "status": status,
-                "response_time_ms": latency_ms
-            }
-            resp = requests.post(CLOUD_HEARTBEAT_URL, json=payload, timeout=5)
-            if resp.status_code != 200:
-                print(f"[~] Cloud warning: {resp.status_code}")
+            code = send_heartbeat(status, latency_ms)
+            if code == 200:
+                print(f"    └── Cloud Heartbeat synced successfully.")
         except Exception as e:
-            print(f"[~] Could not contact cloud server: {e}")
+            print(f"    └── [!] Warning syncing with cloud: {e}")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
