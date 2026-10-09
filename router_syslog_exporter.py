@@ -15,7 +15,7 @@ tplink_mac_verified = True       # Hardware verified as authentic TP-Link router
 tplink_packet_count = 0
 last_sender_ip = "103.181.90.226"
 
-# Scan past log to initialize state correctly on service start
+# Scan past log to initialize state accurately on service start
 try:
     with open("/var/log/router_telemetry.log", "r") as f:
         for line in f:
@@ -33,7 +33,7 @@ def syslog_listener():
     global zte_last_packet_time, tplink_last_direct_time, tplink_link_up, tplink_mac_verified, tplink_packet_count, last_sender_ip
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", 514))
-    print("Syslog UDP listener running on 514 with MAC verification...")
+    print("Syslog UDP listener running on 514 with instant down detection & MAC verification...")
     while True:
         try:
             data, addr = sock.recvfrom(2048)
@@ -69,7 +69,8 @@ def syslog_listener():
                 # Instant physical link drop on port 3 (eth2)
                 if "port 3(eth2) entered disabled state" in msg or "mac 1 link down" in msg:
                     tplink_link_up = False
-                    tplink_mac_verified = False  # Reset authentication on disconnect!
+                    tplink_mac_verified = False  # Reset authentication on disconnect
+                    tplink_last_direct_time = 0   # Zero out direct time for instant 0s down
 
                 # Physical link detected on port 3 (eth2)
                 elif "port 3(eth2) entered forwarding state" in msg:
@@ -89,15 +90,15 @@ class MetricsHandler(BaseHTTPRequestHandler):
         
         # ZTE gateway heartbeat freshness (active within 120s)
         zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 0
-        direct_age = now - tplink_last_direct_time if tplink_last_direct_time > 0 else 999999
         gateway_alive = (zte_age < 120)
 
-        # TP-Link WR845N Secondary Router is strictly ONLINE if:
-        # - Gateway is receiving power/internet (gateway_alive)
-        # - AND physical link on eth2 is up AND hardware is verified as TP-Link MAC (tplink_mac_verified)
-        # - OR direct TP-Link syslog packet was received within last 180s
-        direct_active = (direct_age < 180)
-        is_up = 1 if (gateway_alive and (direct_active or (tplink_link_up and tplink_mac_verified))) else 0
+        # TP-Link WR845N Secondary Router is strictly ONLINE (1) if:
+        # - Primary Gateway is receiving power/internet (gateway_alive)
+        # - AND physical Ethernet link on eth2 is up (tplink_link_up)
+        # - AND the device connected is verified as the TP-Link router MAC (tplink_mac_verified)
+        # The moment the router unplugs / loses power:
+        # - tplink_link_up drops to False instantly -> is_up drops to 0 in < 1 second!
+        is_up = 1 if (gateway_alive and tplink_link_up and tplink_mac_verified) else 0
         latency_ms = 0.55 if is_up == 1 else 0.0
 
         metrics = (
