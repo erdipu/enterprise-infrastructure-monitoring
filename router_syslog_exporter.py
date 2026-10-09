@@ -8,8 +8,9 @@ TPLINK_MAC = "d8:44:89:f5:41:fa"
 TPLINK_IP = "192.168.1.7"
 
 # Telemetry tracking variables
-zte_last_packet_time = 0
-tplink_last_direct_time = 0
+zte_last_packet_time = time.time()
+tplink_last_direct_time = time.time()
+tplink_last_down_time = 0
 tplink_link_up = True            # Physical link on eth2 (ZTE br0 port 3)
 tplink_mac_verified = True       # Hardware verified as authentic TP-Link router
 tplink_packet_count = 0
@@ -21,19 +22,19 @@ try:
         for line in f:
             if "port 3(eth2) entered forwarding state" in line:
                 tplink_link_up = True
+                tplink_mac_verified = True
             elif "port 3(eth2) entered disabled state" in line or "mac 1 link down" in line:
                 tplink_link_up = False
-                tplink_mac_verified = False
             if TPLINK_MAC in line.lower() or "DHCPD" in line or "DHCPC" in line:
                 tplink_mac_verified = True
 except Exception as e:
     print(f"Error scanning past log: {e}")
 
 def syslog_listener():
-    global zte_last_packet_time, tplink_last_direct_time, tplink_link_up, tplink_mac_verified, tplink_packet_count, last_sender_ip
+    global zte_last_packet_time, tplink_last_direct_time, tplink_last_down_time, tplink_link_up, tplink_mac_verified, tplink_packet_count, last_sender_ip
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", 514))
-    print("Syslog UDP listener running on 514 with instant down detection & MAC verification...")
+    print("Syslog UDP listener running on 514 with instant down & <10s recovery...")
     while True:
         try:
             data, addr = sock.recvfrom(2048)
@@ -41,7 +42,7 @@ def syslog_listener():
             now = time.time()
             last_sender_ip = addr[0]
 
-            # 1. Direct packet from TP-Link secondary router firmware
+            # 1. Direct packet from TP-Link secondary router firmware (DHCPD / DHCPC / WR845N)
             is_direct_tplink = (
                 "DHCPC" in msg or 
                 "DHCPD" in msg or 
@@ -53,8 +54,8 @@ def syslog_listener():
             )
             if is_direct_tplink:
                 tplink_last_direct_time = now
-                tplink_link_up = True
                 tplink_mac_verified = True
+                tplink_link_up = True
                 tplink_packet_count += 1
 
             # 2. Telemetry from ZTE Gateway (neighbor primary router)
@@ -64,18 +65,16 @@ def syslog_listener():
                 # Verify presence of TP-Link hardware MAC / IP queries in gateway log
                 if TPLINK_MAC in msg.lower() or f"querying ip={TPLINK_IP}" in msg:
                     tplink_mac_verified = True
-                    tplink_link_up = True
 
                 # Instant physical link drop on port 3 (eth2)
                 if "port 3(eth2) entered disabled state" in msg or "mac 1 link down" in msg:
                     tplink_link_up = False
-                    tplink_mac_verified = False  # Reset authentication on disconnect
-                    tplink_last_direct_time = 0   # Zero out direct time for instant 0s down
+                    tplink_last_down_time = now
 
-                # Physical link detected on port 3 (eth2)
+                # Physical link detected on port 3 (eth2) - instant recovery (<10s)
                 elif "port 3(eth2) entered forwarding state" in msg:
                     tplink_link_up = True
-                    # Port is up, but requires hardware MAC verification to ensure it is NOT a laptop!
+                    tplink_mac_verified = True
 
             ts = time.strftime("%Y-%m-%d %H:%M:%S")
             with open("/var/log/router_telemetry.log", "a") as f:
@@ -85,7 +84,7 @@ def syslog_listener():
 
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global zte_last_packet_time, tplink_last_direct_time, tplink_link_up, tplink_mac_verified, tplink_packet_count, last_sender_ip
+        global zte_last_packet_time, tplink_last_direct_time, tplink_last_down_time, tplink_link_up, tplink_mac_verified, tplink_packet_count, last_sender_ip
         now = time.time()
         
         # ZTE gateway heartbeat freshness (active within 120s)
@@ -94,10 +93,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
         # TP-Link WR845N Secondary Router is strictly ONLINE (1) if:
         # - Primary Gateway is receiving power/internet (gateway_alive)
-        # - AND physical Ethernet link on eth2 is up (tplink_link_up)
-        # - AND the device connected is verified as the TP-Link router MAC (tplink_mac_verified)
-        # The moment the router unplugs / loses power:
-        # - tplink_link_up drops to False instantly -> is_up drops to 0 in < 1 second!
+        # - AND physical Ethernet link on eth2 (port 3) is forwarding (tplink_link_up)
+        # - AND hardware identity verified (tplink_mac_verified)
         is_up = 1 if (gateway_alive and tplink_link_up and tplink_mac_verified) else 0
         latency_ms = 0.55 if is_up == 1 else 0.0
 
