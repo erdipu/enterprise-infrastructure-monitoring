@@ -58,7 +58,7 @@
           <label class="form-label text-secondary small fw-semibold">Password</label>
           <div class="input-group">
             <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-lock"></i></span>
-            <input type="password" id="loginPassword" class="form-control bg-dark text-light border-secondary" placeholder="Password" required value="AdminPassword123!">
+            <input type="password" id="loginPassword" class="form-control bg-dark text-light border-secondary" placeholder="Password" required>
           </div>
         </div>
 
@@ -67,12 +67,10 @@
         </button>
 
         <div class="mt-3 p-2 bg-dark rounded border border-secondary text-secondary small">
-          <strong>Default Credentials:</strong><br>
-          • <code>admin</code> / <code>AdminPassword123!</code> (Admin Role)<br>
-          • <code>operator</code> / <code>OperatorPassword123!</code> (NOC Operator)<br>
-          • <code>viewer</code> / <code>ViewerPassword123!</code> (Read-Only)
+          <i class="bi bi-shield-lock me-1"></i> <strong>Enterprise Access:</strong> Use your provisioned corporate NOC credentials to authenticate.
         </div>
       </form>
+
     </div>
   </div>
 

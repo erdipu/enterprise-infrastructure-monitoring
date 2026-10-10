@@ -165,13 +165,14 @@ docker compose up -d
 
 ### Step 4: Access User Interfaces
 
-| Component | URL | Default Credentials | Purpose |
+| Component | Host URL | Access & Authentication | Purpose |
 |---|---|---|---|
-| **Custom NOC Web Portal** | [http://localhost:8090](http://localhost:8090) | `admin` / `AdminPassword123!` | Incident queue, server inventory, triage modal, CSV export |
-| **FastAPI Swagger Docs** | [http://localhost:8090/docs](http://localhost:8090/docs) | N/A | Interactive REST API documentation |
-| **Grafana Dashboards** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin` | Executive & technical metrics visualizations |
-| **Prometheus Web UI** | [http://localhost:9090](http://localhost:9090) | N/A | TSDB queries, target health, rule status |
-| **Alertmanager Console** | [http://localhost:9093](http://localhost:9093) | N/A | Active alert grouping, routes, silences |
+| **Custom NOC Web Portal** | [http://deepak-monitoring.duckdns.org:8090](http://deepak-monitoring.duckdns.org:8090) | Admin Role (Configured in `.env`) | Incident queue, server inventory, triage modal, CSV export |
+| **FastAPI Swagger Docs** | [http://deepak-monitoring.duckdns.org:8090/docs](http://deepak-monitoring.duckdns.org:8090/docs) | N/A (Public API Schema) | Interactive REST API documentation |
+| **Grafana Dashboards** | [http://deepak-monitoring.duckdns.org:3000](http://deepak-monitoring.duckdns.org:3000) | Admin Role (Set on First Login) | Executive & technical metrics visualizations |
+| **Prometheus Web UI** | [http://deepak-monitoring.duckdns.org:9090](http://deepak-monitoring.duckdns.org:9090) | Internal / Operator Access | TSDB queries, target health, rule status |
+| **Alertmanager Console** | [http://deepak-monitoring.duckdns.org:9093](http://deepak-monitoring.duckdns.org:9093) | Internal / Operator Access | Active alert grouping, routes, silences |
+
 
 ---
 

@@ -81,14 +81,15 @@ Before starting the platform, ensure your workstation or server meets the follow
 
 Once `docker compose up -d` executes, access the services using your web browser:
 
-| Application / Service | URL | Default Credentials | Description |
+| Application / Service | Host URL | Access & Authentication | Description |
 |---|---|---|---|
-| **Custom NOC Web Portal** | [http://localhost:8000](http://localhost:8000) | `admin` / `AdminPassword123!` | Incident triage, server inventory, CSV export |
-| **FastAPI REST API Docs** | [http://localhost:8000/docs](http://localhost:8000/docs) | N/A | Swagger UI interactive API documentation |
-| **Grafana Dashboards** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin` (or Anonymous Viewer) | Executive & technical metrics visualizations |
-| **Prometheus Dashboard** | [http://localhost:9090](http://localhost:9090) | N/A | PromQL queries, targets status, rule engine |
-| **Alertmanager Console** | [http://localhost:9093](http://localhost:9093) | N/A | Active alert grouping, routes, silences |
-| **PostgreSQL Database** | `localhost:5432` | `postgres` / `postgres_secure_password_replace_me` | Persistent database datastore |
+| **Custom NOC Web Portal** | [http://deepak-monitoring.duckdns.org:8090](http://deepak-monitoring.duckdns.org:8090) | Admin Role (Configured in `.env`) | Incident triage, server inventory, CSV export |
+| **FastAPI REST API Docs** | [http://deepak-monitoring.duckdns.org:8090/docs](http://deepak-monitoring.duckdns.org:8090/docs) | N/A | Swagger UI interactive API documentation |
+| **Grafana Dashboards** | [http://deepak-monitoring.duckdns.org:3000](http://deepak-monitoring.duckdns.org:3000) | Admin Role (Set on First Login) | Executive & technical metrics visualizations |
+| **Prometheus Dashboard** | [http://deepak-monitoring.duckdns.org:9090](http://deepak-monitoring.duckdns.org:9090) | Internal / Operator Access | PromQL queries, targets status, rule engine |
+| **Alertmanager Console** | [http://deepak-monitoring.duckdns.org:9093](http://deepak-monitoring.duckdns.org:9093) | Internal / Operator Access | Active alert grouping, routes, silences |
+| **PostgreSQL Database** | `deepak-monitoring.duckdns.org:5432` | Protected via `.env` Secret | Persistent database datastore |
+
 
 ---
 
