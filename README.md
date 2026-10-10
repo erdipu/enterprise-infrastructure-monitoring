@@ -245,6 +245,7 @@ Every alert rule contains a `runbook_url` pointing directly to an SOP in `runboo
 - [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and corporate dataflow walkthrough.
 
 ### Master Disaster Recovery & Backup Manuals
+- [`DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf) ([`docs/DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf)): **Executive Disaster Recovery Specification Document (Publication-Grade 4-Page PDF)** covering 3-2-1 zero-cost architecture, PC rebuild instructions, failure matrices, and verified restoration drills.
 - [`docs/DISASTER_RECOVERY_PLAN.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/DISASTER_RECOVERY_PLAN.md): **Master Disaster Recovery Plan (DRP)** covering PC destruction, cloud server loss, 3-2-1 backup strategy (₹0), and RTO/RPO guarantees.
 - [`docs/PC_REBUILD_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/PC_REBUILD_GUIDE.md): **Step-by-step PC Rebuild Guide** to recover and resume full operations within 15 minutes after formatting or replacing your computer.
 - [`docs/BACKUP_AND_RESTORE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/BACKUP_AND_RESTORE_GUIDE.md): Complete offline backup instructions, GitHub ZIP downloads, Git bundles, database snapshots, and AES-256 secret encryption.
@@ -310,6 +311,7 @@ For full architectural details, see [ENTERPRISE_SYSTEM_ARCHITECTURE.md](docs/ENT
 enterprise-infrastructure-monitoring/
 ├── README.md                              # Master project portfolio documentation & emergency checklist
 ├── ENTERPRISE_SYSTEM_ARCHITECTURE.pdf     # Root-level executive architecture specification document
+├── DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf  # Root-level executive disaster recovery specification document
 ├── router_syslog_exporter.py              # UDP 514 Syslog telemetry daemon & :9125 Prometheus exporter
 ├── router_watchdog.py                     # 7-stage corporate escalation & multi-target watchdog engine
 ├── docker-compose.yml                     # 7-container multi-service orchestration
@@ -335,7 +337,8 @@ enterprise-infrastructure-monitoring/
 │   ├── schema.sql                         # PostgreSQL DDL with indexes & constraints
 │   └── init.sql                           # Initialization script with seed accounts & data
 ├── docs/                                  # Enterprise engineering & disaster recovery documentation
-│   ├── DISASTER_RECOVERY_PLAN.md          # Master Disaster Recovery Plan & 3-2-1 strategy (₹0)
+│   ├── DISASTER_RECOVERY_AND_BACKUP_PLAN.pdf # Publication-grade executive DRP PDF manual
+│   ├── DISASTER_RECOVERY_PLAN.md          # Master Disaster Recovery Plan & 3-2-1 strategy (INR 0)
 │   ├── PC_REBUILD_GUIDE.md                # 15-minute PC rebuild guide after formatting
 │   ├── BACKUP_AND_RESTORE_GUIDE.md        # Full offline backup, Git bundle, and restore manual
 │   ├── DATABASE_RECOVERY_GUIDE.md         # PostgreSQL 15 schema recovery & automated cron snapshots
@@ -368,6 +371,7 @@ enterprise-infrastructure-monitoring/
 │   ├── restore_database.sh                # Hardened interactive database restore with safety snapshot
 │   ├── verify_backup_integrity.py         # GZIP & SHA-256 backup integrity validator
 │   ├── create_offline_bundle.sh           # Standalone Git bundle & source packager for 3-2-1 backup
+│   ├── generate_disaster_recovery_pdf.py  # ReportLab 4-page Disaster Recovery PDF compiler
 │   ├── generate_architecture_pdf.py       # ReportLab PDF compilation engine
 │   ├── simulate_high_cpu.py               # Safe failure simulations
 │   ├── simulate_high_memory.py
