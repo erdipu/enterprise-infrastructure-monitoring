@@ -6,9 +6,13 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104.0-009688)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791)
 ![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ED)
+![Architecture PDF](https://img.shields.io/badge/Architecture-PDF%20Document-red?logo=adobeacrobatreader)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+> 📄 **Executive Architecture Specification Document:** [**Download / View ENTERPRISE_SYSTEM_ARCHITECTURE.pdf**](ENTERPRISE_SYSTEM_ARCHITECTURE.pdf) *(Full hybrid cloud topology, CGNAT traversal, 7-stage escalation engine, and live deployment specifications).*
+
 An enterprise-grade, 100% open-source **Infrastructure Observability & ITIL Incident Operations Platform**. Designed for deployment in corporate datacenters, enterprise NOCs, and hybrid cloud environments—delivering the robustness and operational depth of commercial solutions like **BMC TrueSight Operations Management** and **OpsRamp**—this system unifies host telemetry, synthetic endpoint monitoring, noise suppression, automated ITIL incident ticketing, SLA enforcement, and operational runbook execution.
+
 
 ---
 
