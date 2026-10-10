@@ -236,21 +236,61 @@ Every alert rule contains a `runbook_url` pointing directly to an SOP in `runboo
 
 ---
 
-## 11. Enterprise Engineering Documentation Guides
- 
-- [`docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md): Corporate production playbook, Windows Active Directory / IIS, VMware ESXi / vCenter, SNMP network monitoring, automated maintenance windows, and backup strategies.
-- [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and corporate dataflow walkthrough.
-- [`docs/INSTALLATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INSTALLATION_GUIDE.md): Step-by-step production installation for Linux, Windows, and macOS.
-- [`docs/CONFIGURATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/CONFIGURATION_GUIDE.md): Threshold tuning, PromQL reference, and custom alert authoring.
+## 11. Enterprise Engineering & Disaster Recovery Documentation
+
+### Architecture & Production Specifications
 - [`docs/ENTERPRISE_SYSTEM_ARCHITECTURE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_SYSTEM_ARCHITECTURE.md): Comprehensive hybrid cloud architecture, CGNAT traversal, 7-stage escalation engine, and live deployment specifications.
 - [`docs/ENTERPRISE_SYSTEM_ARCHITECTURE.pdf`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_SYSTEM_ARCHITECTURE.pdf): Publication-grade executive architecture specification document (Formatted PDF).
+- [`docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_PRODUCTION_PLAYBOOK.md): Corporate production playbook, Windows Active Directory / IIS, VMware ESXi / vCenter, SNMP network monitoring, automated maintenance windows, and backup strategies.
+- [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and corporate dataflow walkthrough.
+
+### Master Disaster Recovery & Backup Manuals
+- [`docs/DISASTER_RECOVERY_PLAN.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/DISASTER_RECOVERY_PLAN.md): **Master Disaster Recovery Plan (DRP)** covering PC destruction, cloud server loss, 3-2-1 backup strategy (₹0), and RTO/RPO guarantees.
+- [`docs/PC_REBUILD_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/PC_REBUILD_GUIDE.md): **Step-by-step PC Rebuild Guide** to recover and resume full operations within 15 minutes after formatting or replacing your computer.
+- [`docs/BACKUP_AND_RESTORE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/BACKUP_AND_RESTORE_GUIDE.md): Complete offline backup instructions, GitHub ZIP downloads, Git bundles, database snapshots, and AES-256 secret encryption.
+- [`docs/DATABASE_RECOVERY_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/DATABASE_RECOVERY_GUIDE.md): PostgreSQL 15 schema recovery, automated nightly cron snapshots, point-in-time recovery, and integrity validation.
+- [`docs/CREDENTIALS_AND_ACCESS_RECOVERY.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/CREDENTIALS_AND_ACCESS_RECOVERY.md): Secure management and recovery of SSH keys, GitHub tokens, Telegram bots, Gmail SMTP, and OCI access without committing secrets.
+- [`docs/PROJECT_SETUP_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/PROJECT_SETUP_GUIDE.md): Complete end-to-end setup guide to deploy from scratch on any fresh Linux server or local PC.
+
+### Operations, Playbooks & Interview Preparation
 - [`docs/OPERATIONS_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/OPERATIONS_GUIDE.md): Corporate NOC daily workflow, ticket triage, and SLA targets.
+- [`docs/INSTALLATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INSTALLATION_GUIDE.md): Production installation for Linux, Windows, and macOS.
+- [`docs/CONFIGURATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/CONFIGURATION_GUIDE.md): Threshold tuning, PromQL reference, and custom alert authoring.
 - [`docs/TROUBLESHOOTING_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/TROUBLESHOOTING_GUIDE.md): Common operational failure scenarios and step-by-step fixes.
 - [`docs/INTERVIEW_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INTERVIEW_GUIDE.md): 30 technical deep-dive questions and architectural analyses covering TSDBs, ITIL, Linux, and BMC TrueSight / OpsRamp comparisons.
 
 ---
 
-## 12. Live Hybrid Cloud Production Deployment
+## 12. Emergency Recovery & Disaster Checklist
+
+If your PC is formatted or you lose access, follow this **quick emergency recovery checklist**:
+
+```text
+[ ] 1. CLONE REPOSITORY:
+       git clone https://github.com/erdipu/enterprise-infrastructure-monitoring.git
+       cd enterprise-infrastructure-monitoring
+
+[ ] 2. RESTORE ENVIRONMENT:
+       cp .env.example .env
+       cp alert_config.example.json alert_config.json
+
+[ ] 3. RESTORE CLOUD SSH KEY:
+       Place 'ssh-key-2026-10-08.key' in ~/.ssh/ and run: chmod 600 ~/.ssh/ssh-key-2026-10-08.key
+
+[ ] 4. VERIFY CLOUD PRODUCTION SERVER:
+       ssh -i ~/.ssh/ssh-key-2026-10-08.key ubuntu@80.225.252.145 "sudo systemctl status router-watchdog"
+
+[ ] 5. RESTORE LOCAL STACK (IF RUNNING LOCALLY):
+       docker compose up -d
+
+[ ] 6. DETAILED RECOVERY STEPS:
+       Read docs/PC_REBUILD_GUIDE.md and docs/DISASTER_RECOVERY_PLAN.md
+```
+
+
+---
+
+## 13. Live Hybrid Cloud Production Deployment
 
 The platform is actively deployed 24/7 across Oracle Cloud Infrastructure (OCI) Always Free Tier and On-Premises Edge Network:
 
@@ -264,15 +304,17 @@ For full architectural details, see [ENTERPRISE_SYSTEM_ARCHITECTURE.md](docs/ENT
 
 ---
 
-## 13. Repository Structure
+## 14. Repository Structure
 
 ```text
 enterprise-infrastructure-monitoring/
-├── README.md                              # Master project portfolio documentation
+├── README.md                              # Master project portfolio documentation & emergency checklist
+├── ENTERPRISE_SYSTEM_ARCHITECTURE.pdf     # Root-level executive architecture specification document
 ├── router_syslog_exporter.py              # UDP 514 Syslog telemetry daemon & :9125 Prometheus exporter
 ├── router_watchdog.py                     # 7-stage corporate escalation & multi-target watchdog engine
 ├── docker-compose.yml                     # 7-container multi-service orchestration
 ├── .env.example                           # Environment configuration template
+├── alert_config.example.json              # Telegram & SMS credentials template
 ├── .gitignore                             # Standard Git exclusions
 ├── alertmanager/
 │   └── alertmanager.yml                   # Grouping, routes, and inhibit (suppression) rules
@@ -292,8 +334,16 @@ enterprise-infrastructure-monitoring/
 ├── database/
 │   ├── schema.sql                         # PostgreSQL DDL with indexes & constraints
 │   └── init.sql                           # Initialization script with seed accounts & data
-├── docs/                                  # Enterprise engineering documentation
-│   ├── ENTERPRISE_SYSTEM_ARCHITECTURE.md  # Full live hybrid cloud architecture & CGNAT traversal
+├── docs/                                  # Enterprise engineering & disaster recovery documentation
+│   ├── DISASTER_RECOVERY_PLAN.md          # Master Disaster Recovery Plan & 3-2-1 strategy (₹0)
+│   ├── PC_REBUILD_GUIDE.md                # 15-minute PC rebuild guide after formatting
+│   ├── BACKUP_AND_RESTORE_GUIDE.md        # Full offline backup, Git bundle, and restore manual
+│   ├── DATABASE_RECOVERY_GUIDE.md         # PostgreSQL 15 schema recovery & automated cron snapshots
+│   ├── CREDENTIALS_AND_ACCESS_RECOVERY.md # Secure credential recovery without committing secrets
+│   ├── PROJECT_SETUP_GUIDE.md             # Complete end-to-end setup guide for fresh machines
+│   ├── ENTERPRISE_SYSTEM_ARCHITECTURE.md  # Live hybrid cloud architecture & CGNAT traversal
+│   ├── ENTERPRISE_SYSTEM_ARCHITECTURE.pdf # Publication-grade executive PDF document
+│   ├── ENTERPRISE_PRODUCTION_PLAYBOOK.md
 │   ├── ARCHITECTURE_GUIDE.md
 │   ├── CONFIGURATION_GUIDE.md
 │   ├── INSTALLATION_GUIDE.md
@@ -313,13 +363,24 @@ enterprise-infrastructure-monitoring/
 │   ├── blackbox.yml                       # HTTP 2xx, TCP, ICMP probing modules
 │   └── prometheus.yml                     # Scrape jobs & Blackbox relabel configurations
 ├── runbooks/                              # 6 ITIL SOP Runbooks
-├── scripts/                               # 5 Safe, reversible failure simulation scripts
+├── scripts/                               # Automation, backup, and simulation scripts
+│   ├── backup_database.sh                 # Automated PostgreSQL snapshot with 30-day retention
+│   ├── restore_database.sh                # Hardened interactive database restore with safety snapshot
+│   ├── verify_backup_integrity.py         # GZIP & SHA-256 backup integrity validator
+│   ├── create_offline_bundle.sh           # Standalone Git bundle & source packager for 3-2-1 backup
+│   ├── generate_architecture_pdf.py       # ReportLab PDF compilation engine
+│   ├── simulate_high_cpu.py               # Safe failure simulations
+│   ├── simulate_high_memory.py
+│   ├── simulate_disk_alert.py
+│   ├── simulate_service_down.py
+│   └── simulate_webhook_alert.py
 └── tests/                                 # 14 Automated unit and integration tests
 ```
 
 ---
 
-## 14. License
+## 15. License
 
 Distributed under the MIT License. Open-source, free for personal and commercial use.
+
 
