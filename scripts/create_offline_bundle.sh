@@ -10,7 +10,9 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-OUTPUT_DIR="${OUTPUT_DIR:-./dist_backups}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/dist_backups}"
 mkdir -p "${OUTPUT_DIR}"
 
 BUNDLE_FILE="${OUTPUT_DIR}/enterprise_monitoring_git_${TIMESTAMP}.bundle"
@@ -24,30 +26,43 @@ echo "=================================================================="
 
 # 1. Create a complete Git Bundle (contains all commits, branches, and tags)
 echo "[*] Creating complete offline Git bundle with full version history..."
-git bundle create "${BUNDLE_FILE}" --all
+git -C "${REPO_DIR}" bundle create "${BUNDLE_FILE}" --all
 BUNDLE_SIZE=$(du -h "${BUNDLE_FILE}" | cut -f1)
 echo "[+] Git bundle created: ${BUNDLE_FILE} (${BUNDLE_SIZE})"
 
 # 2. Create a complete standalone archive (excluding temporary caches and local secrets)
 echo "[*] Creating full standalone source archive..."
-tar --exclude='.git' \
+tar -C "${REPO_DIR}" \
+    --exclude='.git' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='.env' \
     --exclude='alert_config.json' \
     --exclude='*.key' \
     --exclude='node_modules' \
+    --exclude='dist_backups' \
+    --exclude='backups' \
     -czf "${ARCHIVE_FILE}" .
 
 ARCHIVE_SIZE=$(du -h "${ARCHIVE_FILE}" | cut -f1)
 echo "[+] Standalone archive created: ${ARCHIVE_FILE} (${ARCHIVE_SIZE})"
 
 # 3. Generate SHA-256 Checksums
+calc_sha256() {
+    local target="$1"
+    if command -v sha256sum &>/dev/null; then
+        sha256sum "${target}"
+    else
+        shasum -a 256 "${target}"
+    fi
+}
+
 echo "[*] Computing cryptographic SHA-256 checksums..."
-cd "${OUTPUT_DIR}"
-sha256sum "$(basename "${BUNDLE_FILE}")" > "$(basename "${BUNDLE_FILE}").sha256"
-sha256sum "$(basename "${ARCHIVE_FILE}")" > "$(basename "${ARCHIVE_FILE}").sha256"
-cd - >/dev/null
+(
+    cd "${OUTPUT_DIR}"
+    calc_sha256 "$(basename "${BUNDLE_FILE}")" > "$(basename "${BUNDLE_FILE}").sha256"
+    calc_sha256 "$(basename "${ARCHIVE_FILE}")" > "$(basename "${ARCHIVE_FILE}").sha256"
+)
 
 echo "=================================================================="
 echo " [SUCCESS] Offline Disaster Recovery Bundle Created!"

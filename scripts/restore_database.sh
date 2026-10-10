@@ -53,7 +53,9 @@ fi
 
 # 1. Create a pre-restore safety snapshot
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-SAFETY_DIR="./backups/safety_snapshots"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SAFETY_DIR="${REPO_DIR}/backups/safety_snapshots"
 mkdir -p "${SAFETY_DIR}"
 SAFETY_BACKUP="${SAFETY_DIR}/pre_restore_safety_${TIMESTAMP}.sql.gz"
 

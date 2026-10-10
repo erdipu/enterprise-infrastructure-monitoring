@@ -5,7 +5,9 @@
 
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-./backups}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+BACKUP_DIR="${BACKUP_DIR:-${REPO_DIR}/backups}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/eim_db_backup_${TIMESTAMP}.sql.gz"
 RETENTION_DAYS=30

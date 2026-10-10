@@ -63,3 +63,15 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Local Secrets & Credentials
+alert_config.json
+*.key
+*.pem
+
+# Local Backup & Snapshot Archives
+backups/
+dist_backups/
+*.sql.gz
+*.bundle
+*.tar.gz
