@@ -237,17 +237,34 @@ Every alert rule contains a `runbook_url` pointing directly to an SOP in `runboo
 - [`docs/ARCHITECTURE_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ARCHITECTURE_GUIDE.md): Deep-dive component breakdown and corporate dataflow walkthrough.
 - [`docs/INSTALLATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INSTALLATION_GUIDE.md): Step-by-step production installation for Linux, Windows, and macOS.
 - [`docs/CONFIGURATION_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/CONFIGURATION_GUIDE.md): Threshold tuning, PromQL reference, and custom alert authoring.
+- [`docs/ENTERPRISE_SYSTEM_ARCHITECTURE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/ENTERPRISE_SYSTEM_ARCHITECTURE.md): Comprehensive hybrid cloud architecture, CGNAT traversal, 7-stage escalation engine, and live deployment specifications.
 - [`docs/OPERATIONS_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/OPERATIONS_GUIDE.md): Corporate NOC daily workflow, ticket triage, and SLA targets.
 - [`docs/TROUBLESHOOTING_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/TROUBLESHOOTING_GUIDE.md): Common operational failure scenarios and step-by-step fixes.
 - [`docs/INTERVIEW_GUIDE.md`](file:///Users/deepak_mamta/.gemini/antigravity/scratch/enterprise-infrastructure-monitoring/docs/INTERVIEW_GUIDE.md): 30 technical deep-dive questions and architectural analyses covering TSDBs, ITIL, Linux, and BMC TrueSight / OpsRamp comparisons.
 
 ---
 
-## 12. Repository Structure
+## 12. Live Hybrid Cloud Production Deployment
+
+The platform is actively deployed 24/7 across Oracle Cloud Infrastructure (OCI) Always Free Tier and On-Premises Edge Network:
+
+| Node / Role | Host & Network Address | Services & Responsibilities | Status |
+|---|---|---|---|
+| **Central Observability Hub (VM 2)** | `deepak-monitoring.duckdns.org`<br/>`80.225.252.145` | • `router-syslog.service` (UDP 514 Syslog & :9125 Exporter)<br/>• `router-watchdog.service` (7-Stage Multi-Target Escalation)<br/>• Prometheus (:9090) & Grafana (:3000)<br/>• Custom NOC Operations Portal (:8090) | **Active (24/7)** |
+| **Cloud Drive Server (VM 1)** | `deepak-cloud-drive.duckdns.org`<br/>`161.118.180.68` | • Target 2: Synthetic Blackbox HTTPS Health Probing<br/>• Corporate Cloud Drive & Storage Application | **Active (24/7)** |
+| **Secondary Router (Target 1)** | `192.168.1.7`<br/>MAC: `D8:44:89:F5:41:FA` | • Target 1: TP-Link TL-WR845N v4 in AP Mode<br/>• Hardwired to Primary Gateway (ZTE F670LV9) Port 3 (`eth2`)<br/>• Outbound UDP 514 Layer-2 Forwarding State Telemetry | **Active (24/7)** |
+
+For full architectural details, see [ENTERPRISE_SYSTEM_ARCHITECTURE.md](docs/ENTERPRISE_SYSTEM_ARCHITECTURE.md).
+
+---
+
+## 13. Repository Structure
 
 ```text
 enterprise-infrastructure-monitoring/
 ├── README.md                              # Master project portfolio documentation
+├── router_syslog_exporter.py              # UDP 514 Syslog telemetry daemon & :9125 Prometheus exporter
+├── router_watchdog.py                     # 7-stage corporate escalation & multi-target watchdog engine
 ├── docker-compose.yml                     # 7-container multi-service orchestration
 ├── .env.example                           # Environment configuration template
 ├── .gitignore                             # Standard Git exclusions
@@ -270,6 +287,7 @@ enterprise-infrastructure-monitoring/
 │   ├── schema.sql                         # PostgreSQL DDL with indexes & constraints
 │   └── init.sql                           # Initialization script with seed accounts & data
 ├── docs/                                  # Enterprise engineering documentation
+│   ├── ENTERPRISE_SYSTEM_ARCHITECTURE.md  # Full live hybrid cloud architecture & CGNAT traversal
 │   ├── ARCHITECTURE_GUIDE.md
 │   ├── CONFIGURATION_GUIDE.md
 │   ├── INSTALLATION_GUIDE.md
@@ -295,6 +313,7 @@ enterprise-infrastructure-monitoring/
 
 ---
 
-## 13. License
+## 14. License
 
 Distributed under the MIT License. Open-source, free for personal and commercial use.
+
