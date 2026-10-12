@@ -36,6 +36,7 @@ def get_ist_time_str():
 # ==============================================================================
 # Notification Credentials & Configuration
 # ==============================================================================
+EMAIL_ENABLED = True
 EMAIL_SENDER = "infoworld2112@gmail.com"
 EMAIL_RECIPIENT = "infoworld2112@gmail.com"
 EMAIL_PASSWORD = "ypen pruc cznc xwhv"
@@ -47,7 +48,7 @@ FAST2SMS_API_KEY = ""
 SMS_MOBILE_NUMBER = ""
 
 def load_dynamic_config():
-    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FAST2SMS_API_KEY, SMS_MOBILE_NUMBER
+    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FAST2SMS_API_KEY, SMS_MOBILE_NUMBER, EMAIL_ENABLED
     try:
         with open("/home/ubuntu/alert_config.json", "r") as f:
             cfg = json.load(f)
@@ -55,6 +56,8 @@ def load_dynamic_config():
             TELEGRAM_CHAT_ID = cfg.get("telegram_chat_id", TELEGRAM_CHAT_ID)
             FAST2SMS_API_KEY = cfg.get("fast2sms_api_key", FAST2SMS_API_KEY)
             SMS_MOBILE_NUMBER = cfg.get("sms_mobile_number", SMS_MOBILE_NUMBER)
+            if "email_enabled" in cfg:
+                EMAIL_ENABLED = bool(cfg["email_enabled"])
     except Exception:
         pass
 
@@ -100,6 +103,9 @@ def send_sms(message_text):
         return False
 
 def send_email(subject, html_body):
+    if not EMAIL_ENABLED or not EMAIL_SENDER:
+        return True
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = EMAIL_SENDER
@@ -303,13 +309,15 @@ class TargetMonitor:
 
                 send_sms(f"RECOVERED: {self.display_name} is back ONLINE. Downtime: {downtime_sec}s. All alerts cleared.")
 
-                print(f"[{self.display_name}] Sending Recovery Email 1 of 2...")
-                send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1))
-                time.sleep(3)
-                print(f"[{self.display_name}] Sending Recovery Email 2 of 2...")
-                send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2))
-
-                print(f"[{self.display_name}] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
+                if EMAIL_ENABLED:
+                    print(f"[{self.display_name}] Sending Recovery Email 1 of 2...")
+                    send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1))
+                    time.sleep(3)
+                    print(f"[{self.display_name}] Sending Recovery Email 2 of 2...")
+                    send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2))
+                    print(f"[{self.display_name}] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
+                else:
+                    print(f"[{self.display_name}] Recovery notices delivered (Telegram sent, Email notifications disabled). Downtime: {downtime_sec}s.")
             elif self.is_router:
                 # Brief boot flap for router (< 15s)
                 print(f"[{self.display_name}] Dispatching System Info notice for {downtime_sec}s boot link flap...")
@@ -321,11 +329,13 @@ class TargetMonitor:
             elapsed = int(now - self.down_start_time) if self.down_start_time else 0
             for idx, (threshold, step_title) in enumerate(OUTAGE_LADDER):
                 if elapsed >= threshold and idx not in self.sent_ladder_steps:
-                    subject = f"🚨 [{idx+1}/7 OUTAGE] {self.display_name} is DOWN - {step_title}"
-                    html = format_outage_email(self.display_name, self.target_info, step_title, elapsed)
-                    if send_email(subject, html):
-                        self.sent_ladder_steps.add(idx)
-                        print(f"[{self.display_name}] Dispatched ladder step {idx+1} at {elapsed}s: {step_title}")
+                    self.sent_ladder_steps.add(idx)
+                    print(f"[{self.display_name}] Dispatched ladder step {idx+1} at {elapsed}s: {step_title}")
+
+                    if EMAIL_ENABLED:
+                        subject = f"🚨 [{idx+1}/7 OUTAGE] {self.display_name} is DOWN - {step_title}"
+                        html = format_outage_email(self.display_name, self.target_info, step_title, elapsed)
+                        send_email(subject, html)
 
                     tg_msg = format_telegram_outage(self.display_name, self.target_info, idx, step_title, elapsed)
                     send_telegram(tg_msg)
