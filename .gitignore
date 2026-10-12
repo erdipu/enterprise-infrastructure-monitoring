@@ -68,6 +68,8 @@ Thumbs.db
 alert_config.json
 *.key
 *.pem
+*tracker_state.json
+
 
 # Local Backup & Snapshot Archives
 backups/
