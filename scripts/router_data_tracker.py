@@ -4,6 +4,7 @@ Enterprise Infrastructure Monitoring Platform
 Home Router & Local Wi-Fi Bandwidth Tracker (TP-Link WR845N - Deepak_2112)
 Measures Wi-Fi interface throughput, cumulative daily/monthly data transfer,
 and dispatches twice-daily Telegram usage reports (12:00 PM IST and 08:00 PM IST).
+Automatically detects if PC is connected to Home Wi-Fi or Roaming on an external network.
 """
 
 import os
@@ -48,7 +49,6 @@ def read_interface_bytes(iface=WIFI_INTERFACE):
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
             lines = res.stdout.strip().splitlines()
-            # Header: Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll
             for line in lines[1:]:
                 parts = line.split()
                 if len(parts) >= 10 and parts[0] == iface:
@@ -69,8 +69,8 @@ def read_interface_bytes(iface=WIFI_INTERFACE):
 def ping_router(ip=ROUTER_IP):
     """Pings the TP-Link router to confirm link health and latency"""
     try:
-        cmd = ["ping", "-c", "2", "-W", "1000", ip]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=4)
+        cmd = ["ping", "-c", "2", "-W", "800", ip]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
         if res.returncode == 0:
             for line in res.stdout.splitlines():
                 if "round-trip min/avg/max" in line or "round-trip min/avg" in line:
@@ -85,18 +85,26 @@ def get_router_mac(ip=ROUTER_IP):
     """Retrieves MAC address from local ARP table"""
     try:
         cmd = ["arp", "-n", ip]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         if res.returncode == 0 and "at " in res.stdout:
             parts = res.stdout.split("at ")[1].split()
             return parts[0].upper()
     except Exception:
         pass
-    return "D8:44:89:F5:41:FA"
+    return ""
 
-def update_and_get_state(curr_rx, curr_tx):
+def check_network_presence():
+    """Detects if PC is currently connected to the home TP-Link router network"""
+    is_up, latency_ms = ping_router(ROUTER_IP)
+    mac = get_router_mac(ROUTER_IP) if is_up else ""
+    is_home = bool(is_up and mac and mac.upper().startswith("D8:44:89"))
+    return is_home, is_up, latency_ms, (mac if mac else "D8:44:89:F5:41:FA")
+
+def update_and_get_state(curr_rx, curr_tx, is_home):
     """
-    Robust delta accumulator for local Wi-Fi interface.
-    Preserves cumulative bytes across machine sleep/reboots and resets at midnight IST.
+    Robust delta accumulator with network-aware roaming support:
+    - If on Home Wi-Fi: accumulates into Home Router data counters.
+    - If on External Network (Hotspot/Office): freezes Home counters and tracks Roaming usage.
     """
     ist_now = get_ist_now()
     today_str = ist_now.strftime("%Y-%m-%d")
@@ -111,6 +119,9 @@ def update_and_get_state(curr_rx, curr_tx):
         "today_tx": 0,
         "month_rx": 0,
         "month_tx": 0,
+        "roaming_today_rx": 0,
+        "roaming_today_tx": 0,
+        "last_network": "HOME" if is_home else "ROAMING",
         "last_updated": time.time()
     }
 
@@ -126,9 +137,13 @@ def update_and_get_state(curr_rx, curr_tx):
             if saved.get("today_date") == today_str:
                 state["today_rx"] = saved.get("today_rx", 0)
                 state["today_tx"] = saved.get("today_tx", 0)
+                state["roaming_today_rx"] = saved.get("roaming_today_rx", 0)
+                state["roaming_today_tx"] = saved.get("roaming_today_tx", 0)
             else:
                 state["today_rx"] = 0
                 state["today_tx"] = 0
+                state["roaming_today_rx"] = 0
+                state["roaming_today_tx"] = 0
 
             # Check month rollover in IST
             if saved.get("current_month") == current_month_str:
@@ -142,21 +157,26 @@ def update_and_get_state(curr_rx, curr_tx):
             if curr_rx >= prev_raw_rx:
                 delta_rx = curr_rx - prev_raw_rx
             else:
-                # Interface reset / system reboot
                 delta_rx = curr_rx
 
             if curr_tx >= prev_raw_tx:
                 delta_tx = curr_tx - prev_raw_tx
             else:
-                # Interface reset / system reboot
                 delta_tx = curr_tx
 
-            state["today_rx"] += delta_rx
-            state["today_tx"] += delta_tx
-            state["month_rx"] += delta_rx
-            state["month_tx"] += delta_tx
+            # Attribute deltas to Home or Roaming
+            if is_home:
+                state["today_rx"] += delta_rx
+                state["today_tx"] += delta_tx
+                state["month_rx"] += delta_rx
+                state["month_tx"] += delta_tx
+            else:
+                state["roaming_today_rx"] += delta_rx
+                state["roaming_today_tx"] += delta_tx
+
             state["last_raw_rx"] = curr_rx
             state["last_raw_tx"] = curr_tx
+            state["last_network"] = "HOME" if is_home else "ROAMING"
 
         except Exception as e:
             print(f"[-] Warning loading state file: {e}")
@@ -206,24 +226,23 @@ def send_telegram(message_html):
 
 def sync_only():
     """Silently updates local network counters without sending Telegram notification"""
+    is_home, is_up, latency_ms, mac = check_network_presence()
     curr_rx, curr_tx = read_interface_bytes()
-    state = update_and_get_state(curr_rx, curr_tx)
-    print(f"[+] Synced local counters for {WIFI_INTERFACE}: Today In={format_bytes(state['today_rx'])}, Out={format_bytes(state['today_tx'])}")
+    state = update_and_get_state(curr_rx, curr_tx, is_home)
+    net_str = "HOME (Deepak_2112)" if is_home else "EXTERNAL / ROAMING"
+    print(f"[+] Synced local counters [{net_str}]: Today Home In={format_bytes(state['today_rx'])}, Out={format_bytes(state['today_tx'])}")
 
 def generate_report(is_test=False):
     ist_now = get_ist_now()
+    is_home, is_up, latency_ms, mac = check_network_presence()
     curr_rx, curr_tx = read_interface_bytes()
-    state = update_and_get_state(curr_rx, curr_tx)
+    state = update_and_get_state(curr_rx, curr_tx, is_home)
 
     rx_today = state["today_rx"]
     tx_today = state["today_tx"]
     total_today = rx_today + tx_today
 
     total_month_gb = (state["month_rx"] + state["month_tx"]) / (1024 * 1024 * 1024)
-
-    is_up, latency_ms = ping_router(ROUTER_IP)
-    router_mac = get_router_mac(ROUTER_IP)
-    status_str = f"Online ({latency_ms:.2f} ms)" if is_up else "Offline / Unreachable"
 
     current_hour = ist_now.hour
     if is_test:
@@ -235,21 +254,35 @@ def generate_report(is_test=False):
 
     time_str = ist_now.strftime("%I:%M:%S %p IST (%d %b %Y)")
 
+    if is_home:
+        status_banner = f"🟢 <b>Link Status  :</b> Connected (Latency: {latency_ms:.2f} ms)"
+        roaming_section = ""
+        footer_note = "✅ <i>Home Wi-Fi telemetry operating normally. Next automated report in scheduled cycle.</i>"
+    else:
+        status_banner = "⚠️ <b>Link Status  :</b> Roaming (Connected to External Network / Hotspot)"
+        roaming_total = state.get("roaming_today_rx", 0) + state.get("roaming_today_tx", 0)
+        roaming_section = (
+            f"📱 <b>External/Hotspot Today :</b> {format_bytes(roaming_total)}\n"
+            f"ℹ️ <i>Home router tracking safely paused while away from home.</i>\n"
+        )
+        footer_note = "ℹ️ <i>PC currently outside home network. Home counters preserved.</i>"
+
     msg = (
         f"📶 <b>[HOME ROUTER DATA USAGE — {label}]</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📡 <b>Access Point :</b> TP-Link TL-WR845N (<code>{ROUTER_SSID}</code>)\n"
-        f"🌐 <b>Gateway IP   :</b> <code>{ROUTER_IP}</code> (MAC: <code>{router_mac}</code>)\n"
+        f"🌐 <b>Gateway IP   :</b> <code>{ROUTER_IP}</code> (MAC: <code>{mac}</code>)\n"
         f"💻 <b>Client Device:</b> Mac Workstation (<code>192.168.1.2</code> on <code>{WIFI_INTERFACE}</code>)\n"
-        f"⚡ <b>Link Latency :</b> {status_str}\n"
+        f"{status_banner}\n"
         f"🕒 <b>Report Time  :</b> {time_str}\n\n"
-        f"📥 <b>Inbound (Download) :</b> <b>{format_bytes(rx_today)}</b>\n"
-        f"📤 <b>Outbound (Upload)   :</b> <b>{format_bytes(tx_today)}</b>\n"
-        f"📈 <b>Total Data Today    :</b> <b>{format_bytes(total_today)}</b>\n\n"
-        f"📅 <b>Month-to-Date Total:</b> {total_month_gb:.2f} GB\n"
-        f"⚡ <b>Daily Quota Limit  :</b> Unlimited\n"
+        f"📥 <b>Home Inbound (Download) :</b> <b>{format_bytes(rx_today)}</b>\n"
+        f"📤 <b>Home Outbound (Upload)   :</b> <b>{format_bytes(tx_today)}</b>\n"
+        f"📈 <b>Total Home Data Today    :</b> <b>{format_bytes(total_today)}</b>\n\n"
+        f"{roaming_section}"
+        f"📅 <b>Month-to-Date Home Total:</b> {total_month_gb:.2f} GB\n"
+        f"⚡ <b>Daily Quota Limit        :</b> Unlimited\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"✅ <i>Home Wi-Fi telemetry operating normally. Next automated report in scheduled cycle.</i>\n"
+        f"{footer_note}\n"
         f"📊 <a href=\"http://deepak-monitoring.duckdns.org:8090\">NOC Operations Portal</a> | "
         f"📈 <a href=\"http://deepak-monitoring.duckdns.org:3000\">Grafana</a>"
     )
