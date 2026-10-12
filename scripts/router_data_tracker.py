@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
 Enterprise Infrastructure Monitoring Platform
-Home Router & Local Wi-Fi Bandwidth Tracker (TP-Link WR845N - Deepak_2112)
-Measures Wi-Fi interface throughput, cumulative daily/monthly data transfer,
-and dispatches twice-daily Telegram usage reports (12:00 PM IST and 08:00 PM IST).
-Automatically detects if PC is connected to Home Wi-Fi or Roaming on an external network.
+Workstation & Home Router Data Tracker (TP-Link WR845N - Deepak_2112)
+Measures cumulative daily/monthly data transfer across Wi-Fi (en1) and Ethernet cable (en0),
+checks router connectivity, and dispatches twice-daily Telegram reports (12:00 PM and 08:00 PM IST).
 """
 
 import os
@@ -24,7 +23,6 @@ STATE_FILE = os.path.join(WORKSPACE_DIR, "router_tracker_state.json")
 CONFIG_FILE = os.path.join(WORKSPACE_DIR, "alert_config.json")
 ROUTER_IP = "192.168.1.7"
 ROUTER_SSID = "Deepak_2112"
-WIFI_INTERFACE = "en1"
 
 def get_ist_now():
     return datetime.now(IST)
@@ -39,32 +37,49 @@ def format_bytes(num_bytes):
     else:
         return f"{num_bytes / (1024 * 1024 * 1024):.2f} GB"
 
-def read_interface_bytes(iface=WIFI_INTERFACE):
-    """Reads cumulative Inbound (Ibytes) and Outbound (Obytes) via netstat on macOS"""
-    rx_bytes = 0
-    tx_bytes = 0
+def read_all_interfaces():
+    """
+    Reads cumulative Inbound (Ibytes) and Outbound (Obytes) across ALL active physical
+    interfaces on this Mac (Wi-Fi en1 and Ethernet en0/en2/en3).
+    Guarantees data is tracked whether using Wi-Fi or an Ethernet cable.
+    """
+    rx_total = 0
+    tx_total = 0
+    active_interfaces = []
+    seen = set()
 
     try:
-        cmd = ["netstat", "-ib", "-I", iface]
+        cmd = ["netstat", "-ib"]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
             lines = res.stdout.strip().splitlines()
             for line in lines[1:]:
                 parts = line.split()
-                if len(parts) >= 10 and parts[0] == iface:
-                    try:
-                        ib = int(parts[6])
-                        ob = int(parts[9])
-                        if ib > rx_bytes:
-                            rx_bytes = ib
-                        if ob > tx_bytes:
-                            tx_bytes = ob
-                    except ValueError:
-                        continue
+                if len(parts) >= 10:
+                    iface = parts[0]
+                    # Only match physical network adapters (en0, en1, en2, etc.)
+                    if iface.startswith("en") and not iface.startswith("bridge"):
+                        key = (iface, parts[3])
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        try:
+                            ib = int(parts[6])
+                            ob = int(parts[9])
+                            if ib > 0 or ob > 0:
+                                rx_total += ib
+                                tx_total += ob
+                                if iface not in active_interfaces:
+                                    active_interfaces.append(iface)
+                        except ValueError:
+                            continue
     except Exception as e:
         print(f"[-] Error reading netstat: {e}")
 
-    return rx_bytes, tx_bytes
+    if not active_interfaces:
+        active_interfaces = ["en1 (Wi-Fi)"]
+
+    return rx_total, tx_total, active_interfaces
 
 def ping_router(ip=ROUTER_IP):
     """Pings the TP-Link router to confirm link health and latency"""
@@ -103,7 +118,7 @@ def check_network_presence():
 def update_and_get_state(curr_rx, curr_tx, is_home):
     """
     Robust delta accumulator with network-aware roaming support:
-    - If on Home Wi-Fi: accumulates into Home Router data counters.
+    - If on Home Network: accumulates into Home data counters.
     - If on External Network (Hotspot/Office): freezes Home counters and tracks Roaming usage.
     """
     ist_now = get_ist_now()
@@ -227,15 +242,16 @@ def send_telegram(message_html):
 def sync_only():
     """Silently updates local network counters without sending Telegram notification"""
     is_home, is_up, latency_ms, mac = check_network_presence()
-    curr_rx, curr_tx = read_interface_bytes()
+    curr_rx, curr_tx, ifaces = read_all_interfaces()
     state = update_and_get_state(curr_rx, curr_tx, is_home)
+    ifaces_str = ", ".join(ifaces)
     net_str = "HOME (Deepak_2112)" if is_home else "EXTERNAL / ROAMING"
-    print(f"[+] Synced local counters [{net_str}]: Today Home In={format_bytes(state['today_rx'])}, Out={format_bytes(state['today_tx'])}")
+    print(f"[+] Synced counters [{net_str}] across [{ifaces_str}]: Today Home In={format_bytes(state['today_rx'])}, Out={format_bytes(state['today_tx'])}")
 
 def generate_report(is_test=False):
     ist_now = get_ist_now()
     is_home, is_up, latency_ms, mac = check_network_presence()
-    curr_rx, curr_tx = read_interface_bytes()
+    curr_rx, curr_tx, ifaces = read_all_interfaces()
     state = update_and_get_state(curr_rx, curr_tx, is_home)
 
     rx_today = state["today_rx"]
@@ -253,11 +269,12 @@ def generate_report(is_test=False):
         label = "08:00 PM EVENING REPORT"
 
     time_str = ist_now.strftime("%I:%M:%S %p IST (%d %b %Y)")
+    ifaces_str = ", ".join(ifaces)
 
     if is_home:
         status_banner = f"🟢 <b>Link Status  :</b> Connected (Latency: {latency_ms:.2f} ms)"
         roaming_section = ""
-        footer_note = "✅ <i>Home Wi-Fi telemetry operating normally. Next automated report in scheduled cycle.</i>"
+        footer_note = "✅ <i>Workstation Wi-Fi & Ethernet telemetry operating normally. Next report in scheduled cycle.</i>"
     else:
         status_banner = "⚠️ <b>Link Status  :</b> Roaming (Connected to External Network / Hotspot)"
         roaming_total = state.get("roaming_today_rx", 0) + state.get("roaming_today_tx", 0)
@@ -268,19 +285,20 @@ def generate_report(is_test=False):
         footer_note = "ℹ️ <i>PC currently outside home network. Home counters preserved.</i>"
 
     msg = (
-        f"📶 <b>[HOME ROUTER DATA USAGE — {label}]</b>\n"
+        f"📶 <b>[HOME NETWORK DATA USAGE — {label}]</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📡 <b>Access Point :</b> TP-Link TL-WR845N (<code>{ROUTER_SSID}</code>)\n"
         f"🌐 <b>Gateway IP   :</b> <code>{ROUTER_IP}</code> (MAC: <code>{mac}</code>)\n"
-        f"💻 <b>Client Device:</b> Mac Workstation (<code>192.168.1.2</code> on <code>{WIFI_INTERFACE}</code>)\n"
+        f"💻 <b>Client Device:</b> Mac Workstation (Active: <code>{ifaces_str}</code>)\n"
+        f"🔌 <b>Coverage     :</b> <b>Wi-Fi + Ethernet Cable</b>\n"
         f"{status_banner}\n"
         f"🕒 <b>Report Time  :</b> {time_str}\n\n"
-        f"📥 <b>Home Inbound (Download) :</b> <b>{format_bytes(rx_today)}</b>\n"
-        f"📤 <b>Home Outbound (Upload)   :</b> <b>{format_bytes(tx_today)}</b>\n"
-        f"📈 <b>Total Home Data Today    :</b> <b>{format_bytes(total_today)}</b>\n\n"
+        f"📥 <b>Inbound (Download) :</b> <b>{format_bytes(rx_today)}</b>\n"
+        f"📤 <b>Outbound (Upload)   :</b> <b>{format_bytes(tx_today)}</b>\n"
+        f"📈 <b>Total Data Today    :</b> <b>{format_bytes(total_today)}</b>\n\n"
         f"{roaming_section}"
-        f"📅 <b>Month-to-Date Home Total:</b> {total_month_gb:.2f} GB\n"
-        f"⚡ <b>Daily Quota Limit        :</b> Unlimited\n"
+        f"📅 <b>Month-to-Date Total :</b> {total_month_gb:.2f} GB\n"
+        f"⚡ <b>Daily Quota Limit   :</b> Unlimited\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{footer_note}\n"
         f"📊 <a href=\"http://deepak-monitoring.duckdns.org:8090\">NOC Operations Portal</a> | "
