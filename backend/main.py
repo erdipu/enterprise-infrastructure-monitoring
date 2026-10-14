@@ -61,10 +61,12 @@ def initialize_seed_data():
 
         if db.query(MonitoringTarget).count() == 0:
             db.add_all([
-                MonitoringTarget(name="Production Web Portal", target_type="website", url_or_host="http://localhost:8000/health", port=8000, status="UP", last_response_time_ms=185.4, last_check=datetime.datetime.utcnow()),
-                MonitoringTarget(name="Core Payments REST API", target_type="api", url_or_host="http://localhost:8000/api/v1/health", port=8000, status="UP", last_response_time_ms=92.1, last_check=datetime.datetime.utcnow())
+                MonitoringTarget(name="Telegram Cloud Storage Drive", target_type="website", url_or_host="https://deepak-cloud-drive.duckdns.org", port=443, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=250.0, last_check=datetime.datetime.utcnow()),
+                MonitoringTarget(name="TP-Link Access Point WR845N (Deepak_2112)", target_type="host", url_or_host="192.168.1.7", port=80, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow()),
+                MonitoringTarget(name="Secondary Router (TP-Link WR845N via DMZ)", target_type="website", url_or_host="http://103.181.90.226", port=80, check_interval_sec=30, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow())
             ])
             db.commit()
+
 
         if db.query(Incident).count() == 0:
             now = datetime.datetime.utcnow()
