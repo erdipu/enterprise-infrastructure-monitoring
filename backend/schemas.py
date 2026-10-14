@@ -150,6 +150,21 @@ class IncidentUpdate(BaseModel):
     root_cause: Optional[str] = None
     resolution_notes: Optional[str] = None
 
+class InternalTriggerIncidentRequest(BaseModel):
+    target_name: str
+    target_info: Optional[str] = None
+    target_type: str = "host"
+    summary: str
+    description: Optional[str] = None
+    priority: str = "P1"
+    severity: str = "Critical"
+
+class InternalResolveIncidentRequest(BaseModel):
+    target_name: str
+    target_info: Optional[str] = None
+    incident_number: Optional[str] = None
+    resolution_notes: Optional[str] = None
+
 class IncidentResponse(IncidentBase):
     id: int
     incident_number: str

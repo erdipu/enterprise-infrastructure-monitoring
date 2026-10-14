@@ -127,17 +127,67 @@ def send_email(subject, html_body):
         return False
 
 # ==============================================================================
+# NOC Backend Incident API Integration
+# ==============================================================================
+def trigger_backend_incident(target_name, target_info, target_type, summary, description):
+    try:
+        url = "http://127.0.0.1:8090/api/v1/incidents/internal/trigger"
+        payload = json.dumps({
+            "target_name": target_name,
+            "target_info": target_info,
+            "target_type": target_type,
+            "summary": summary,
+            "description": description,
+            "priority": "P1",
+            "severity": "Critical"
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            inc_num = data.get("incident_number")
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{ts}] [NOC Backend] Incident triggered successfully: {inc_num} for {target_name}")
+            return inc_num
+    except Exception as e:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{ts}] [Incident API Error] Failed to trigger incident for {target_name}: {e}")
+        return None
+
+def resolve_backend_incident(target_name, target_info, inc_number=None, resolution_notes=None):
+    try:
+        url = "http://127.0.0.1:8090/api/v1/incidents/internal/resolve"
+        payload = json.dumps({
+            "target_name": target_name,
+            "target_info": target_info,
+            "incident_number": inc_number,
+            "resolution_notes": resolution_notes
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            inc_num = data.get("incident_number")
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{ts}] [NOC Backend] Incident resolved successfully: {inc_num} for {target_name}")
+            return inc_num
+    except Exception as e:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{ts}] [Incident API Error] Failed to resolve incident for {target_name}: {e}")
+        return None
+
+# ==============================================================================
 # Telegram Message Formatters
 # ==============================================================================
-def format_telegram_outage(device_name, target_info, idx, step_title, elapsed_sec):
+def format_telegram_outage(device_name, target_info, idx, step_title, elapsed_sec, inc_number=None):
     minutes = elapsed_sec // 60
     seconds = elapsed_sec % 60
     duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
     ist_time = get_ist_time_str()
+    inc_line = f"🎫 <b>Incident:</b> <code>#{inc_number}</code> (P1 Critical)\n" if inc_number else ""
     
     return (
         f"🚨 <b>[ALERT {idx+1}/7] CRITICAL OUTAGE DETECTED</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{inc_line}"
         f"📍 <b>Device:</b> {device_name}\n"
         f"🌐 <b>Target:</b> <code>{target_info}</code>\n"
         f"⚠️ <b>Status:</b> OFFLINE / DOWN\n"
@@ -148,15 +198,17 @@ def format_telegram_outage(device_name, target_info, idx, step_title, elapsed_se
         f"📈 <a href=\"http://deepak-monitoring.duckdns.org:3000\">Grafana Dashboard</a>"
     )
 
-def format_telegram_recovery(device_name, target_info, downtime_sec, extra_metric="0.55 ms (Stable)"):
+def format_telegram_recovery(device_name, target_info, downtime_sec, extra_metric="0.55 ms (Stable)", inc_number=None):
     minutes = downtime_sec // 60
     seconds = downtime_sec % 60
     duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
     ist_time = get_ist_time_str()
+    inc_line = f"🎫 <b>Incident:</b> <code>#{inc_number}</code> CLOSED\n" if inc_number else ""
     
     return (
         f"✅ <b>[RESOLVED] INFRASTRUCTURE RECOVERED</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{inc_line}"
         f"📍 <b>Device:</b> {device_name}\n"
         f"🌐 <b>Target:</b> <code>{target_info}</code>\n"
         f"📶 <b>Status:</b> ONLINE / OPERATIONAL\n"
@@ -186,14 +238,16 @@ def format_telegram_boot_stabilized(device_name, target_info, downtime_sec):
 # ==============================================================================
 # Email Formatters
 # ==============================================================================
-def format_outage_email(device_name, target_info, step_title, elapsed_sec):
+def format_outage_email(device_name, target_info, step_title, elapsed_sec, inc_number=None):
     minutes = elapsed_sec // 60
     seconds = elapsed_sec % 60
     duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+    inc_p = f"<p><strong>Incident Number:</strong> <span style=\"font-weight: bold; color: #dc2626;\">#{inc_number}</span> (P1 Critical)</p>" if inc_number else ""
     
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 22px; border: 2px solid #dc2626; border-radius: 8px; background-color: #fef2f2;">
         <h2 style="color: #dc2626; margin-top: 0;">🚨 CRITICAL INFRASTRUCTURE OUTAGE</h2>
+        {inc_p}
         <p><strong>Device:</strong> {device_name} ({target_info})</p>
         <p><strong>Status:</strong> <span style="background: #dc2626; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold;">OFFLINE / DOWN</span></p>
         <p><strong>Escalation Level:</strong> {step_title}</p>
@@ -205,10 +259,12 @@ def format_outage_email(device_name, target_info, step_title, elapsed_sec):
     """
     return html
 
-def format_recovery_email(device_name, target_info, copy_num):
+def format_recovery_email(device_name, target_info, copy_num, inc_number=None):
+    inc_p = f"<p><strong>Incident:</strong> <span style=\"font-weight: bold; color: #16a34a;\">#{inc_number}</span> [RESOLVED & CLOSED]</p>" if inc_number else ""
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 22px; border: 2px solid #16a34a; border-radius: 8px; background-color: #f0fdf4;">
         <h2 style="color: #16a34a; margin-top: 0;">✅ INFRASTRUCTURE ALERT RESOLVED</h2>
+        {inc_p}
         <p><strong>Device:</strong> {device_name} ({target_info})</p>
         <p><strong>Status:</strong> <span style="background: #16a34a; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold;">ONLINE / UP</span></p>
         <p><strong>Telemetry:</strong> Service health restored and responsive. Stability 100%.</p>
@@ -238,7 +294,7 @@ def probe_router():
 
 def probe_cloud_drive():
     """Probes Cloud Drive Server (VM 1) via direct HTTPS probe and Prometheus fallback"""
-    # 1. Direct HTTPS probe
+    # 1. Direct HTTPS HEAD probe (Zero-bandwidth consumption)
     try:
         req = urllib.request.Request(
             "https://deepak-cloud-drive.duckdns.org",
@@ -270,15 +326,17 @@ def probe_cloud_drive():
 # Target Monitoring Object
 # ==============================================================================
 class TargetMonitor:
-    def __init__(self, key, display_name, target_info, probe_fn, is_router=False):
+    def __init__(self, key, display_name, target_info, probe_fn, is_router=False, target_type="host"):
         self.key = key
         self.display_name = display_name
         self.target_info = target_info
         self.probe_fn = probe_fn
         self.is_router = is_router
+        self.target_type = target_type
         self.state = "UP"
         self.down_start_time = None
         self.sent_ladder_steps = set()
+        self.active_incident_number = None
 
     def update(self, now):
         current_status = self.probe_fn()
@@ -290,6 +348,7 @@ class TargetMonitor:
             self.state = "DOWN"
             self.down_start_time = now
             self.sent_ladder_steps.clear()
+            self.active_incident_number = None
 
         # CASE B: TRANSITION DOWN -> UP (RECOVERY)
         elif current_status == "UP" and self.state == "DOWN":
@@ -299,23 +358,33 @@ class TargetMonitor:
             downtime_sec = int(now - self.down_start_time) if self.down_start_time else 0
             
             # Check if an actual outage alert was sent (>= 15s or sent_ladder_steps not empty)
-            had_outage_alert = (len(self.sent_ladder_steps) > 0 or downtime_sec >= 15)
+            had_outage_alert = (len(self.sent_ladder_steps) > 0 or downtime_sec >= 15 or self.active_incident_number is not None)
+            inc_to_close = self.active_incident_number
+
             self.down_start_time = None
             self.sent_ladder_steps.clear()
+            self.active_incident_number = None
 
             if had_outage_alert:
+                # 1. Auto-resolve incident in NOC Portal DB
+                notes = f"Service recovered and responsive. Total downtime: {downtime_sec}s."
+                resolved_inc = resolve_backend_incident(self.display_name, self.target_info, inc_to_close, notes)
+                if not inc_to_close and resolved_inc:
+                    inc_to_close = resolved_inc
+
                 extra_metric = "0.55 ms (Link Stable)" if self.is_router else "HTTP 200 OK (Responsive)"
-                tg_text = format_telegram_recovery(self.display_name, self.target_info, downtime_sec, extra_metric)
+                tg_text = format_telegram_recovery(self.display_name, self.target_info, downtime_sec, extra_metric, inc_to_close)
                 send_telegram(tg_text)
 
-                send_sms(f"RECOVERED: {self.display_name} is back ONLINE. Downtime: {downtime_sec}s. All alerts cleared.")
+                inc_sms = f" (INC #{inc_to_close} CLOSED)" if inc_to_close else ""
+                send_sms(f"RECOVERED: {self.display_name} is back ONLINE{inc_sms}. Downtime: {downtime_sec}s. All alerts cleared.")
 
                 if EMAIL_ENABLED:
                     print(f"[{self.display_name}] Sending Recovery Email 1 of 2...")
-                    send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1))
+                    send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1, inc_to_close))
                     time.sleep(3)
                     print(f"[{self.display_name}] Sending Recovery Email 2 of 2...")
-                    send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2))
+                    send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2, inc_to_close))
                     print(f"[{self.display_name}] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
                 else:
                     print(f"[{self.display_name}] Recovery notices delivered (Telegram sent, Email notifications disabled). Downtime: {downtime_sec}s.")
@@ -331,17 +400,28 @@ class TargetMonitor:
             for idx, (threshold, step_title) in enumerate(OUTAGE_LADDER):
                 if elapsed >= threshold and idx not in self.sent_ladder_steps:
                     self.sent_ladder_steps.add(idx)
-                    print(f"[{self.display_name}] Dispatched ladder step {idx+1} at {elapsed}s: {step_title}")
+
+                    # Trigger or link active incident in NOC portal on first ladder alert
+                    if not self.active_incident_number:
+                        summary = f"{self.display_name} is DOWN / Unreachable"
+                        description = f"Critical outage detected for {self.display_name} ({self.target_info}) by Watchdog prober. Downtime exceeded {threshold}s."
+                        self.active_incident_number = trigger_backend_incident(
+                            self.display_name, self.target_info, self.target_type, summary, description
+                        )
+
+                    print(f"[{self.display_name}] Dispatched ladder step {idx+1} at {elapsed}s (INC: {self.active_incident_number}): {step_title}")
 
                     if EMAIL_ENABLED:
-                        subject = f"🚨 [{idx+1}/7 OUTAGE] {self.display_name} is DOWN - {step_title}"
-                        html = format_outage_email(self.display_name, self.target_info, step_title, elapsed)
+                        inc_subj = f" #{self.active_incident_number}" if self.active_incident_number else ""
+                        subject = f"🚨 [{idx+1}/7 OUTAGE]{inc_subj} {self.display_name} is DOWN - {step_title}"
+                        html = format_outage_email(self.display_name, self.target_info, step_title, elapsed, self.active_incident_number)
                         send_email(subject, html)
 
-                    tg_msg = format_telegram_outage(self.display_name, self.target_info, idx, step_title, elapsed)
+                    tg_msg = format_telegram_outage(self.display_name, self.target_info, idx, step_title, elapsed, self.active_incident_number)
                     send_telegram(tg_msg)
 
-                    sms_msg = f"ALERT: {self.display_name} is DOWN ({step_title}). Check NOC Portal: http://deepak-monitoring.duckdns.org:8090"
+                    inc_sms = f" [INC #{self.active_incident_number}]" if self.active_incident_number else ""
+                    sms_msg = f"ALERT:{inc_sms} {self.display_name} is DOWN ({step_title}). Check NOC Portal: http://deepak-monitoring.duckdns.org:8090"
                     send_sms(sms_msg)
 
 # ==============================================================================
@@ -349,7 +429,7 @@ class TargetMonitor:
 # ==============================================================================
 def main():
     load_dynamic_config()
-    print("Starting Corporate Multi-Target Escalation Watchdog Engine...")
+    print("Starting Corporate Multi-Target Escalation Watchdog Engine with Incident Bridge...")
 
     targets = [
         TargetMonitor(
@@ -357,14 +437,16 @@ def main():
             display_name="Secondary Router (TP-Link WR845N)",
             target_info="192.168.1.7",
             probe_fn=probe_router,
-            is_router=True
+            is_router=True,
+            target_type="router"
         ),
         TargetMonitor(
             key="cloud_drive",
             display_name="Cloud Drive Server (VM 1)",
             target_info="https://deepak-cloud-drive.duckdns.org",
             probe_fn=probe_cloud_drive,
-            is_router=False
+            is_router=False,
+            target_type="website"
         )
     ]
 
