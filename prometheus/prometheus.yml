@@ -40,18 +40,6 @@ scrape_configs:
           environment: 'production'
           tier: 'compute'
 
-  # 2b. Remote Cloud Drive Server (VM 1)
-  - job_name: 'node_exporter_cloud_drive'
-    scrape_interval: 30s
-    static_configs:
-      - targets: ['161.118.180.68:9100']
-        labels:
-          instance: 'deepak-cloud-drive'
-          hostname: 'telegram-cloud-drive'
-          os_type: 'linux'
-          environment: 'production'
-          tier: 'compute'
-
   # 3. Synthetic Blackbox Prober (Monitored Websites & External Cloud Drive)
   - job_name: 'blackbox_http'
     metrics_path: /probe
