@@ -242,6 +242,7 @@ def probe_cloud_drive():
     try:
         req = urllib.request.Request(
             "https://deepak-cloud-drive.duckdns.org",
+            method="HEAD",
             headers={"User-Agent": "Watchdog-Probe/1.0"}
         )
         with urllib.request.urlopen(req, timeout=5) as resp:

@@ -53,6 +53,20 @@ scrape_configs:
           target_type: 'api'
           environment: 'production'
           service_name: 'Incident-Backend-API'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'blackbox_exporter:9115'
+
+  - job_name: 'blackbox_cloud_drive'
+    metrics_path: /probe
+    params:
+      module: [http_head_2xx]
+    scrape_interval: 15s
+    static_configs:
       - targets:
           - 'https://deepak-cloud-drive.duckdns.org'
         labels:
@@ -66,6 +80,7 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: 'blackbox_exporter:9115'
+
 
   # 4. Secondary Router & Home Office Telemetry
   - job_name: 'router_telemetry'
