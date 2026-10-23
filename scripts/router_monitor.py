@@ -14,7 +14,7 @@ import sys
 
 ROUTER_IP = "192.168.1.7"
 CLOUD_HEARTBEAT_URL = "http://deepak-monitoring.duckdns.org:8090/api/v1/targets/heartbeat"
-TARGET_NAME = "TP-Link Access Point WR845N (Deepak_2112)"
+TARGET_NAME = "Secondary Router (TP-Link WR845N)"
 POLL_INTERVAL_SECONDS = 15
 
 def ping_router(ip: str):

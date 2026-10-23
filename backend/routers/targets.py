@@ -168,4 +168,26 @@ def receive_heartbeat(
         target.last_check = now
 
     db.commit()
+
+    # Forward heartbeat directly to router_syslog_exporter on :9125
+    is_router_hb = (
+        "router" in payload.target_name.lower() or
+        "wr845n" in payload.target_name.lower() or
+        "192.168.1.7" in payload.target_name
+    )
+    if is_router_hb:
+        fwd_payload = json.dumps({
+            "status": payload.status,
+            "response_time_ms": payload.response_time_ms,
+            "source": "noc_api_heartbeat"
+        }).encode("utf-8")
+        for exporter_url in ["http://172.18.0.1:9125/heartbeat", "http://127.0.0.1:9125/heartbeat", "http://host.docker.internal:9125/heartbeat"]:
+            try:
+                fwd_req = urllib.request.Request(exporter_url, data=fwd_payload, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(fwd_req, timeout=1) as resp:
+                    if resp.status == 200:
+                        break
+            except Exception:
+                continue
+
     return {"status": "success", "target": payload.target_name, "state": payload.status}
