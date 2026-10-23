@@ -35,7 +35,8 @@ try:
                 "can't be same with br0" in line.lower() or
                 ("DHCPD" in line and "AP's DHCP server" in line) or
                 "DHCPC: Send REQUEST" in line or
-                "DHCPC: Recv ACK" in line):
+                "DHCPC: Recv ACK" in line or
+                "DHCPC: Ignoring XID" in line):
                 try:
                     line_date = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S").timestamp()
                     if (now_ts - line_date) < 14400:  # Fresh within 4 hours
@@ -56,8 +57,11 @@ try:
                 except Exception:
                     pass
 
-            # Check for MAC presence
-            if TPLINK_MAC in line.lower():
+            # Check for MAC presence or direct TP-Link packet to record last seen time
+            if (TPLINK_MAC in line.lower() or 
+                "DHCPC:" in line or 
+                ("DHCPD:" in line and "AP's DHCP server" in line) or
+                "can't be same with br0" in line.lower()):
                 try:
                     line_date = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S").timestamp()
                     if line_date > tplink_last_seen_time:
@@ -102,6 +106,7 @@ def syslog_listener():
                       "link up" in msg.lower() or 
                       "can't be same with br0" in msg.lower()):
                     tplink_link_up = True
+                    tplink_last_seen_time = now
                     last_link_change_time = now
 
                 # Positive pulse: MAC address or IP query from ZTE switch table
@@ -179,14 +184,14 @@ class MetricsHandler(BaseHTTPRequestHandler):
             gateway_alive = (zte_age < 120)
 
             # Secondary router is UP only if:
-            # 1. Primary gateway is receiving power and sending syslogs
-            # 2. Physical switch port is forwarding (tplink_link_up)
-            # 3. Telemetry is fresh (seen within last 4 hours)
+            # 1. Primary gateway is receiving power and sending syslogs (zte_age < 120s)
+            # 2. Physical switch port has not received an explicit link drop (tplink_link_up is True)
+            # 3. Heartbeat / syslog packet from secondary router is actively seen within 12 seconds
+            #    (TP-Link sends DHCP packets continuously every 5 seconds; silence > 12s indicates power-off/unplug)
             mac_age = now - tplink_last_seen_time if tplink_last_seen_time > 0 else 999999
-            link_age = now - last_link_change_time if last_link_change_time > 0 else 999999
-            fresh_activity = (mac_age < 14400) or (link_age < 14400 and tplink_link_up)
+            tplink_heartbeat_fresh = (mac_age <= 12)
 
-            is_up = 1 if (gateway_alive and tplink_link_up and fresh_activity) else 0
+            is_up = 1 if (gateway_alive and tplink_link_up and tplink_heartbeat_fresh) else 0
             latency_ms = 0.55 if is_up == 1 else 0.0
 
         zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999

@@ -653,7 +653,7 @@ def main():
         load_dynamic_config()
         for t in targets:
             t.update(now)
-        time.sleep(3)
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()
