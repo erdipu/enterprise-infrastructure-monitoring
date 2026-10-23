@@ -12,7 +12,7 @@ import urllib.request
 import urllib.error
 import sys
 
-ROUTER_IP = "192.168.1.7"
+ROUTER_IP = "192.168.1.2"
 CLOUD_HEARTBEAT_URL = "http://deepak-monitoring.duckdns.org:8090/api/v1/targets/heartbeat"
 TARGET_NAME = "Secondary Router (TP-Link WR845N)"
 POLL_INTERVAL_SECONDS = 15

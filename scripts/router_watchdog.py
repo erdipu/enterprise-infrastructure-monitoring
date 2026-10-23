@@ -623,7 +623,7 @@ def main():
         TargetMonitor(
             key="router",
             display_name="Secondary Router (TP-Link WR845N)",
-            target_info="192.168.1.7",
+            target_info="192.168.1.2",
             probe_fn=probe_router,
             is_router=True,
             target_type="router"

@@ -9,6 +9,7 @@ from auth import require_roles
 from pydantic import BaseModel
 import urllib.request
 import time
+import json
 
 router = APIRouter(prefix="/targets", tags=["Synthetic Monitoring Targets"])
 
@@ -24,7 +25,7 @@ def sync_target_realtime(target: MonitoringTarget):
     is_router = (
         "router" in target.name.lower() or 
         "wr845n" in target.name.lower() or 
-        target.url_or_host == "192.168.1.7" or
+        target.url_or_host in ["192.168.1.2", "192.168.1.7"] or
         "103.181.90.226" in (target.url_or_host or "")
     )
     

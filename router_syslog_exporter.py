@@ -8,7 +8,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Unique hardware identity for Secondary Router
 TPLINK_MAC = "d8:44:89:f5:41:fa"
-TPLINK_IP = "192.168.1.7"
+TPLINK_IP = "192.168.1.2"
 
 # Telemetry tracking variables
 zte_last_packet_time = time.time()
