@@ -29,8 +29,12 @@ try:
     now_ts = time.time()
     with open("/var/log/router_telemetry.log", "r") as f:
         for line in f:
-            # Check for link up across any LAN port (eth0-eth3 / port 1-4)
-            if re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", line, re.IGNORECASE) or "link up" in line:
+            # Check for link up across any LAN port (eth0-eth3 / port 1-4) or TP-Link reconnect
+            if (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", line, re.IGNORECASE) or 
+                "link up" in line.lower() or 
+                ("DHCPD" in line and "AP's DHCP server" in line) or
+                "DHCPC: Send REQUEST" in line or
+                "DHCPC: Recv ACK" in line):
                 try:
                     line_date = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S").timestamp()
                     if (now_ts - line_date) < 14400:  # Fresh within 4 hours
@@ -39,8 +43,11 @@ try:
                 except Exception:
                     pass
 
-            # Check for link drop across any LAN port
-            elif re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", line, re.IGNORECASE) or "link down" in line:
+            # Check for link drop across any LAN port or ZTE record drop
+            elif (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", line, re.IGNORECASE) or 
+                  "link down" in line.lower() or
+                  "can't be same with br0" in line.lower() or
+                  ("record not find" in line.lower() and (TPLINK_IP in line or TPLINK_MAC in line.lower()))):
                 try:
                     line_date = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S").timestamp()
                     if (now_ts - line_date) < 14400:
@@ -78,8 +85,17 @@ def syslog_listener():
                 # 1. Heartbeat from ZTE Gateway (Primary Fiber Router)
                 zte_last_packet_time = now
 
-                # Physical link drop on ANY switch port (eth0-eth3)
-                if re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", msg, re.IGNORECASE) or "link down" in msg.lower():
+                # Disconnection signals from ZTE Gateway:
+                # - Physical switch port link drop
+                # - Kernel bridge drop ("can't be same with br0")
+                # - Failed switch record lookup for secondary router
+                is_link_drop = (
+                    re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", msg, re.IGNORECASE) is not None or
+                    "link down" in msg.lower() or
+                    "can't be same with br0" in msg.lower() or
+                    ("record not find" in msg.lower() and (TPLINK_IP in msg or TPLINK_MAC in msg.lower()))
+                )
+                if is_link_drop:
                     tplink_link_up = False
                     last_link_change_time = now
 
@@ -88,10 +104,11 @@ def syslog_listener():
                     tplink_link_up = True
                     last_link_change_time = now
 
-                # Positive pulse: MAC address query from ZTE switch table
-                if TPLINK_MAC in msg.lower():
+                # Positive pulse: MAC address or IP query from ZTE switch table
+                if TPLINK_MAC in msg.lower() or (TPLINK_IP in msg and "DebugPrintf" in msg and "record not find" not in msg.lower()):
                     tplink_last_seen_time = now
                     tplink_link_up = True
+                    last_link_change_time = now
                     tplink_packet_count += 1
 
             else:
@@ -102,11 +119,13 @@ def syslog_listener():
                     "HomeRouter" in msg or
                     TPLINK_MAC in msg.lower() or
                     TPLINK_IP in msg or
-                    ("DHCPD" in msg and "AP's DHCP server" in msg)
+                    ("DHCPD" in msg and "AP's DHCP server" in msg) or
+                    "DHCPC:" in msg
                 )
                 if is_direct_tplink:
                     tplink_last_seen_time = now
                     tplink_link_up = True
+                    last_link_change_time = now
                     tplink_packet_count += 1
 
             with open("/var/log/router_telemetry.log", "a") as f:
