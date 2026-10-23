@@ -555,6 +555,11 @@ class TargetMonitor:
                 tg_text = format_telegram_recovery(self.display_name, self.target_info, downtime_sec, extra_metric, inc_to_close, snow_to_close)
                 send_telegram(tg_text)
 
+                if self.is_router:
+                    print(f"[{self.display_name}] Dispatching System Info notice for {downtime_sec}s boot link flap / stabilization...")
+                    tg_info = format_telegram_boot_stabilized(self.display_name, self.target_info, downtime_sec)
+                    send_telegram(tg_info)
+
                 inc_label = snow_to_close or inc_to_close
                 inc_sms = f" (INC #{inc_label} CLOSED)" if inc_label else ""
                 send_sms(f"RECOVERED: {self.display_name} is back ONLINE{inc_sms}. Downtime: {downtime_sec}s. All alerts cleared.")

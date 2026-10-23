@@ -21,11 +21,12 @@ def sync_target_realtime(target: MonitoringTarget):
     """
     now = datetime.now(timezone.utc)
     
-    # Check if this target is a local router (192.168.1.7) or marked as router
+    # Check if this target is a local router (192.168.1.2) or marked as router
     is_router = (
         "router" in target.name.lower() or 
         "wr845n" in target.name.lower() or 
         target.url_or_host in ["192.168.1.2", "192.168.1.7"] or
+        "103.181.90.135" in (target.url_or_host or "") or
         "103.181.90.226" in (target.url_or_host or "")
     )
     
@@ -154,7 +155,7 @@ def receive_heartbeat(
         target = MonitoringTarget(
             name=payload.target_name,
             target_type="host",
-            url_or_host="192.168.1.7",
+            url_or_host="192.168.1.2",
             port=80,
             check_interval_sec=15,
             expected_status_code=200,

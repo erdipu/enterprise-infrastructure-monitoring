@@ -63,7 +63,7 @@ def initialize_seed_data():
             db.add_all([
                 MonitoringTarget(name="Telegram Cloud Storage Drive", target_type="website", url_or_host="https://deepak-cloud-drive.duckdns.org", port=443, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=250.0, last_check=datetime.datetime.utcnow()),
                 MonitoringTarget(name="TP-Link Access Point WR845N (Deepak_2112)", target_type="host", url_or_host="192.168.1.2", port=80, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow()),
-                MonitoringTarget(name="Secondary Router (TP-Link WR845N via DMZ)", target_type="website", url_or_host="http://103.181.90.226", port=80, check_interval_sec=30, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow())
+                MonitoringTarget(name="Secondary Router (TP-Link WR845N via DMZ)", target_type="website", url_or_host="http://103.181.90.135", port=80, check_interval_sec=30, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow())
             ])
             db.commit()
 
