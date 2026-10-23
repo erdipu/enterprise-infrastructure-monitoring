@@ -19,7 +19,7 @@ from email.mime.text import MIMEText
 # 7th alert: 1 month     (2592000s)
 # ==============================================================================
 OUTAGE_LADDER = [
-    (15, "1st Alert (Immediate Outage Detected - 15s)"),
+    (5, "1st Alert (Immediate Outage Detected - 5s)"),
     (120, "2nd Alert (Outage Confirmed - 2m)"),
     (600, "3rd Alert (Outage Sustained - 10m)"),
     (43200, "4th Alert (Major Extended Outage - 12h)"),
@@ -522,10 +522,10 @@ class TargetMonitor:
             self.state = "UP"
             downtime_sec = int(now - self.down_start_time) if self.down_start_time else 0
             
-            # Check if an actual outage alert was sent (>= 15s or sent_ladder_steps not empty)
+            # Check if an actual outage alert was sent (>= 5s or sent_ladder_steps not empty)
             had_outage_alert = (
                 len(self.sent_ladder_steps) > 0 or 
-                downtime_sec >= 15 or 
+                downtime_sec >= 5 or 
                 self.active_incident_number is not None or
                 self.snow_incident_number is not None
             )
@@ -569,7 +569,7 @@ class TargetMonitor:
                 else:
                     print(f"[{self.display_name}] Recovery notices delivered (Telegram sent, Email notifications disabled). Downtime: {downtime_sec}s.")
             elif self.is_router:
-                # Brief boot flap for router (< 15s)
+                # Brief boot flap for router (< 5s)
                 print(f"[{self.display_name}] Dispatching System Info notice for {downtime_sec}s boot link flap...")
                 tg_info = format_telegram_boot_stabilized(self.display_name, self.target_info, downtime_sec)
                 send_telegram(tg_info)
