@@ -32,6 +32,7 @@ try:
             # Check for link up across any LAN port (eth0-eth3 / port 1-4) or TP-Link reconnect
             if (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", line, re.IGNORECASE) or 
                 "link up" in line.lower() or 
+                "can't be same with br0" in line.lower() or
                 ("DHCPD" in line and "AP's DHCP server" in line) or
                 "DHCPC: Send REQUEST" in line or
                 "DHCPC: Recv ACK" in line):
@@ -46,7 +47,6 @@ try:
             # Check for link drop across any LAN port or ZTE record drop
             elif (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", line, re.IGNORECASE) or 
                   "link down" in line.lower() or
-                  "can't be same with br0" in line.lower() or
                   ("record not find" in line.lower() and (TPLINK_IP in line or TPLINK_MAC in line.lower()))):
                 try:
                     line_date = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S").timestamp()
@@ -87,20 +87,20 @@ def syslog_listener():
 
                 # Disconnection signals from ZTE Gateway:
                 # - Physical switch port link drop
-                # - Kernel bridge drop ("can't be same with br0")
                 # - Failed switch record lookup for secondary router
                 is_link_drop = (
                     re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", msg, re.IGNORECASE) is not None or
                     "link down" in msg.lower() or
-                    "can't be same with br0" in msg.lower() or
                     ("record not find" in msg.lower() and (TPLINK_IP in msg or TPLINK_MAC in msg.lower()))
                 )
                 if is_link_drop:
                     tplink_link_up = False
                     last_link_change_time = now
 
-                # Physical link restored on ANY switch port (eth0-eth3)
-                elif re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", msg, re.IGNORECASE) or "link up" in msg.lower():
+                # Physical link / bridge attachment restored on ZTE switch port (eth0-eth3)
+                elif (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", msg, re.IGNORECASE) or 
+                      "link up" in msg.lower() or 
+                      "can't be same with br0" in msg.lower()):
                     tplink_link_up = True
                     last_link_change_time = now
 
