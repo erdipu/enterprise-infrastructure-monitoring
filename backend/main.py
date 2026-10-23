@@ -62,7 +62,7 @@ def initialize_seed_data():
         if db.query(MonitoringTarget).count() == 0:
             db.add_all([
                 MonitoringTarget(name="Telegram Cloud Storage Drive", target_type="website", url_or_host="https://deepak-cloud-drive.duckdns.org", port=443, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=250.0, last_check=datetime.datetime.utcnow()),
-                MonitoringTarget(name="TP-Link Access Point WR845N (Deepak_2112)", target_type="host", url_or_host="192.168.1.7", port=80, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow()),
+                MonitoringTarget(name="TP-Link Access Point WR845N (Deepak_2112)", target_type="host", url_or_host="192.168.1.2", port=80, check_interval_sec=15, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow()),
                 MonitoringTarget(name="Secondary Router (TP-Link WR845N via DMZ)", target_type="website", url_or_host="http://103.181.90.226", port=80, check_interval_sec=30, expected_status_code=200, status="UP", last_response_time_ms=0.6, last_check=datetime.datetime.utcnow())
             ])
             db.commit()
@@ -171,11 +171,11 @@ def prometheus_metrics():
 
     return f"""# HELP router_ping_latency_ms Secondary TP-Link router ping latency in milliseconds
 # TYPE router_ping_latency_ms gauge
-router_ping_latency_ms{{instance="192.168.1.7", router="TP-Link_WR845N", model="TL-WR845N"}} {lat}
+router_ping_latency_ms{{instance="192.168.1.2", router="TP-Link_WR845N", model="TL-WR845N"}} {lat}
 
 # HELP router_up Secondary TP-Link router availability status (1=UP, 0=DOWN)
 # TYPE router_up gauge
-router_up{{instance="192.168.1.7", router="TP-Link_WR845N", model="TL-WR845N"}} {is_up}
+router_up{{instance="192.168.1.2", router="TP-Link_WR845N", model="TL-WR845N"}} {is_up}
 """
 
 # Register API Routers

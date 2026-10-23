@@ -191,7 +191,7 @@
               "options": {
                 "1": {
                   "color": "blue",
-                  "text": "192.168.1.7 (WR845N)"
+                  "text": "192.168.1.2 (WR845N)"
                 }
               },
               "type": "value"
@@ -214,7 +214,7 @@
       "targets": [
         {
           "expr": "router_ping_latency_ms",
-          "legendFormat": "TP-Link TL-WR845N (192.168.1.7) Ping Latency",
+          "legendFormat": "TP-Link TL-WR845N (192.168.1.2) Ping Latency",
           "refId": "A"
         }
       ],
