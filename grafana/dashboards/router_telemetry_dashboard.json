@@ -24,6 +24,7 @@
     {
       "id": 1,
       "title": "Router Online Status",
+      "description": "Alert Condition: Evaluates router_up every 2s. Value 1 = ONLINE (Healthy), Value 0 = P1 CRITICAL OUTAGE.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -70,6 +71,7 @@
     {
       "id": 2,
       "title": "Current Ping Latency",
+      "description": "Alert Condition: 0 ms = Host Unreachable / Outage. > 50 ms = High Latency Warning.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -202,7 +204,8 @@
     },
     {
       "id": 5,
-      "title": "Ping Latency (ms) Over Time",
+      "title": "Ping Latency (ms) Over Time — [P1 Outage: Latency == 0 ms | Normal: 0.5 - 5 ms]",
+      "description": "🚨 P1 CRITICAL OUTAGE: Triggers when router_up == 0 OR latency == 0 ms for >= 5s (Power-off / Cable Disconnected).\n\n✅ RECOVERY: Triggers when router_up == 1 AND latency > 0 ms (Link Stabilized at ~0.55 ms).\n\n⚠️ LATENCY THRESHOLDS: Healthy Normal (< 20 ms), Latency Warning (20 - 50 ms), High Latency Spike (> 50 ms).",
       "type": "timeseries",
       "gridPos": {
         "h": 9,
@@ -214,7 +217,7 @@
       "targets": [
         {
           "expr": "router_ping_latency_ms",
-          "legendFormat": "TP-Link TL-WR845N (192.168.1.2) Ping Latency",
+          "legendFormat": "TP-Link TL-WR845N (192.168.1.2) Ping Latency [0 ms = OUTAGE | Normal < 10 ms]",
           "refId": "A"
         }
       ],
@@ -225,7 +228,27 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "fillOpacity": 15,
-            "spanNulls": false
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
           },
           "color": {
             "fixedColor": "cyan",
@@ -233,6 +256,21 @@
           },
           "min": 0
         }
+      }
+    },
+    {
+      "id": 6,
+      "title": "📋 Incident Escalation Policy & Alert Conditions",
+      "type": "text",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### 🛡️ Enterprise SLA & Alert Evaluation Rules\n\n| Alert Trigger Condition | Severity | SLA Window | Automated Action Taken |\n| :--- | :---: | :---: | :--- |\n| **`router_up == 0`** or **`router_ping_latency_ms == 0`** | **🚨 P1 CRITICAL** | **5 Seconds** | Dispatches immediate Telegram P1 Outage alert, creates **ServiceNow Incident (#INC)**, initiates NOC escalation ladder (5s, 2m, 10m, 12h, 24h, 1w, 1mo). |\n| **`router_up == 1`** and **`router_ping_latency_ms > 0`** | **✅ RESOLVED** | **Immediate (< 2s)** | Auto-resolves ServiceNow Incident with **`Actual End`** timestamp, sends Telegram recovery alert, dispatches **`BOOT LINK STABILIZED`** notice. |\n| **`router_ping_latency_ms > 50 ms`** | **⚠️ WARNING** | **Sustained 60s** | Flags Wi-Fi congestion / high RF interference on Grafana dashboard. |\n\n> **Note on Zero Latency:** An ICMP Ping Latency of **0 ms** represents complete packet loss / host unreachable (power-off or disconnected cable). A healthy local link operates between **0.5 ms and 5.0 ms**."
       }
     }
   ],
@@ -260,5 +298,5 @@
   "timezone": "browser",
   "title": "Secondary Router (TP-Link WR845N) - Telemetry & Latency",
   "uid": "tplink-router-telemetry",
-  "version": 1
+  "version": 2
 }
