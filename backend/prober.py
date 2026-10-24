@@ -99,6 +99,12 @@ def probe_universal(host: str, port: Optional[int] = None, target_type: Optional
         return "DOWN", 0.0
 
     # 3. Public Cloud Servers, Hostnames, Websites, APIs
+    # Fast exit if host doesn't even resolve in DNS
+    try:
+        resolved_ip = socket.gethostbyname(clean_host)
+    except Exception:
+        return "DOWN", 0.0
+
     # A. Check HTTP/HTTPS first if it is a website, api, or web port
     if target_type in ["website", "api"] or (inferred_port in [80, 443, 8080, 8443, 3000, 9090, 8090, 8000]):
         url_to_test = raw_host
@@ -111,7 +117,7 @@ def probe_universal(host: str, port: Optional[int] = None, target_type: Optional
         try:
             t0 = time.time()
             req = urllib.request.Request(url_to_test, headers={"User-Agent": "NOC-HealthCheck/2.0"})
-            with urllib.request.urlopen(req, timeout=2.0) as resp:
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
                 elapsed = (time.time() - t0) * 1000.0
                 if resp.status < 500:
                     return "UP", round(elapsed, 2)
@@ -124,24 +130,18 @@ def probe_universal(host: str, port: Optional[int] = None, target_type: Optional
             pass
 
     # B. TCP Port Check (multi-port discovery)
-    ports_to_try = [inferred_port] if inferred_port else [443, 80, 22, 9100, 3389, 8080, 8090]
+    ports_to_try = [inferred_port] if inferred_port else [443, 80, 22, 9100, 3389]
     for p in ports_to_try:
         try:
             t0 = time.time()
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.2)
-            res = sock.connect_ex((clean_host, p))
+            sock.settimeout(0.6)
+            res = sock.connect_ex((resolved_ip, p))
             sock.close()
             if res == 0:
                 elapsed = (time.time() - t0) * 1000.0
                 return "UP", round(elapsed, 2)
         except Exception:
             continue
-
-    # C. Host resolution check: if host can't even resolve, it's definitely DOWN
-    try:
-        socket.gethostbyname(clean_host)
-    except Exception:
-        return "DOWN", 0.0
 
     return "DOWN", 0.0
