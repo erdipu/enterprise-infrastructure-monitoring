@@ -255,7 +255,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
         # Priority 1: Direct edge heartbeat override
         if heartbeat_time > 0:
             edge_age = now - heartbeat_time
-            if edge_age < 8:
+            if edge_age < 15:
                 # Active streaming
                 is_up = 1 if heartbeat_status == "UP" else 0
                 latency_ms = heartbeat_latency if is_up == 1 else 0.0
@@ -265,7 +265,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
                 is_up = 0
                 latency_ms = 0.0
                 data_source = "edge_heartbeat_down"
-            elif edge_age >= 8 and edge_age < 1800:
+            elif edge_age >= 15 and edge_age < 1800:
                 # Abrupt stream silence (router Wi-Fi dropped / power off / link severed)
                 # Stays DOWN until recovery signal arrives from ZTE or edge agent
                 is_up = 0

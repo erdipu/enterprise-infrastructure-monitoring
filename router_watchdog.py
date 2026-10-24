@@ -495,6 +495,7 @@ class TargetMonitor:
         self.is_router = is_router
         self.target_type = target_type
         self.state = "UP"
+        self.failure_counter = 0
         self.down_start_time = None
         self.sent_ladder_steps = set()
         self.active_incident_number = None
@@ -504,75 +505,82 @@ class TargetMonitor:
     def update(self, now):
         current_status = self.probe_fn()
 
-        # CASE A: TRANSITION UP -> DOWN
+        # CASE A: TRANSITION UP -> DOWN (Debounced with 3 consecutive failure checks)
         if current_status == "DOWN" and self.state == "UP":
+            self.failure_counter += 1
+            if self.failure_counter < 3:
+                return  # Transient blip ignored; require 3 consecutive failed checks
+
             ts = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{ts}] [{self.display_name}] Outage detected! Transitioning UP -> DOWN")
+            print(f"[{ts}] [{self.display_name}] Outage confirmed! Transitioning UP -> DOWN")
             self.state = "DOWN"
-            self.down_start_time = now
+            self.down_start_time = now - 2.0  # Account for debounce window
             self.sent_ladder_steps.clear()
             self.active_incident_number = None
             self.snow_incident_number = None
             self.snow_sys_id = None
 
         # CASE B: TRANSITION DOWN -> UP (RECOVERY)
-        elif current_status == "UP" and self.state == "DOWN":
-            ts = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{ts}] [{self.display_name}] Recovery detected! Transitioning DOWN -> UP")
-            self.state = "UP"
-            downtime_sec = int(now - self.down_start_time) if self.down_start_time else 0
-            
-            # Check if an actual outage alert was sent (>= 5s or sent_ladder_steps not empty)
-            had_outage_alert = (
-                len(self.sent_ladder_steps) > 0 or 
-                downtime_sec >= 5 or 
-                self.active_incident_number is not None or
-                self.snow_incident_number is not None
-            )
-            inc_to_close = self.active_incident_number
-            snow_to_close = self.snow_incident_number
-            snow_sys_id_to_close = self.snow_sys_id
-
-            self.down_start_time = None
-            self.sent_ladder_steps.clear()
-            self.active_incident_number = None
-            self.snow_incident_number = None
-            self.snow_sys_id = None
-
-            if had_outage_alert:
-                notes = f"Service recovered and responsive. Total downtime: {downtime_sec}s."
+        elif current_status == "UP":
+            self.failure_counter = 0
+            if self.state == "DOWN":
+                ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[{ts}] [{self.display_name}] Recovery detected! Transitioning DOWN -> UP")
+                self.state = "UP"
+                downtime_sec = int(now - self.down_start_time) if self.down_start_time else 0
                 
-                # 1. Auto-resolve incident in Local NOC Portal DB
-                resolved_inc = resolve_backend_incident(self.display_name, self.target_info, inc_to_close, notes)
-                if not inc_to_close and resolved_inc:
-                    inc_to_close = resolved_inc
+                # Check if an actual outage alert was sent (>= 5s or sent_ladder_steps not empty)
+                had_outage_alert = (
+                    len(self.sent_ladder_steps) > 0 or 
+                    downtime_sec >= 5 or 
+                    self.active_incident_number is not None or
+                    self.snow_incident_number is not None
+                )
+                inc_to_close = self.active_incident_number
+                snow_to_close = self.snow_incident_number
+                snow_sys_id_to_close = self.snow_sys_id
 
-                # 2. Auto-resolve incident in ServiceNow PDI
-                if snow_sys_id_to_close:
-                    resolve_servicenow_incident(snow_sys_id_to_close, notes)
+                self.down_start_time = None
+                self.sent_ladder_steps.clear()
+                self.active_incident_number = None
+                self.snow_incident_number = None
+                self.snow_sys_id = None
 
-                extra_metric = "0.55 ms (Link Stable)" if self.is_router else "HTTP 200 OK (Responsive)"
-                tg_text = format_telegram_recovery(self.display_name, self.target_info, downtime_sec, extra_metric, inc_to_close, snow_to_close)
-                send_telegram(tg_text)
+                if had_outage_alert:
+                    notes = f"Service recovered and responsive. Total downtime: {downtime_sec}s."
+                    
+                    # 1. Auto-resolve incident in Local NOC Portal DB
+                    resolved_inc = resolve_backend_incident(self.display_name, self.target_info, inc_to_close, notes)
+                    if not inc_to_close and resolved_inc:
+                        inc_to_close = resolved_inc
 
-                inc_label = snow_to_close or inc_to_close
-                inc_sms = f" (INC #{inc_label} CLOSED)" if inc_label else ""
-                send_sms(f"RECOVERED: {self.display_name} is back ONLINE{inc_sms}. Downtime: {downtime_sec}s. All alerts cleared.")
+                    # 2. Auto-resolve incident in ServiceNow PDI
+                    if snow_sys_id_to_close:
+                        resolve_servicenow_incident(snow_sys_id_to_close, notes)
 
-                if EMAIL_ENABLED:
-                    print(f"[{self.display_name}] Sending Recovery Email 1 of 2...")
-                    send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1, inc_to_close, snow_to_close))
-                    time.sleep(3)
-                    print(f"[{self.display_name}] Sending Recovery Email 2 of 2...")
-                    send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2, inc_to_close, snow_to_close))
-                    print(f"[{self.display_name}] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
-                else:
-                    print(f"[{self.display_name}] Recovery notices delivered (Telegram sent, Email notifications disabled). Downtime: {downtime_sec}s.")
-            elif self.is_router:
-                # Brief boot flap for router (< 5s)
-                print(f"[{self.display_name}] Dispatching System Info notice for {downtime_sec}s boot link flap...")
-                tg_info = format_telegram_boot_stabilized(self.display_name, self.target_info, downtime_sec)
-                send_telegram(tg_info)
+                    extra_metric = "0.55 ms (Link Stable)" if self.is_router else "HTTP 200 OK (Responsive)"
+                    tg_text = format_telegram_recovery(self.display_name, self.target_info, downtime_sec, extra_metric, inc_to_close, snow_to_close)
+                    send_telegram(tg_text)
+
+                    # Only send boot link stabilized notice if outage was sustained >= 15s (actual reboot)
+                    if self.is_router and downtime_sec >= 15:
+                        print(f"[{self.display_name}] Dispatching System Info notice for {downtime_sec}s boot link flap / stabilization...")
+                        tg_info = format_telegram_boot_stabilized(self.display_name, self.target_info, downtime_sec)
+                        send_telegram(tg_info)
+
+                    inc_label = snow_to_close or inc_to_close
+                    inc_sms = f" (INC #{inc_label} CLOSED)" if inc_label else ""
+                    send_sms(f"RECOVERED: {self.display_name} is back ONLINE{inc_sms}. Downtime: {downtime_sec}s. All alerts cleared.")
+
+                    if EMAIL_ENABLED:
+                        print(f"[{self.display_name}] Sending Recovery Email 1 of 2...")
+                        send_email(f"✅ [RESOLVED 1/2] {self.display_name} Back Online", format_recovery_email(self.display_name, self.target_info, 1, inc_to_close, snow_to_close))
+                        time.sleep(3)
+                        print(f"[{self.display_name}] Sending Recovery Email 2 of 2...")
+                        send_email(f"✅ [RESOLVED 2/2] {self.display_name} Telemetry Restored", format_recovery_email(self.display_name, self.target_info, 2, inc_to_close, snow_to_close))
+                        print(f"[{self.display_name}] Recovery notices delivered (strictly 1 Telegram, 2 Emails). Downtime: {downtime_sec}s.")
+                    else:
+                        print(f"[{self.display_name}] Recovery notices delivered (Telegram sent, Email notifications disabled). Downtime: {downtime_sec}s.")
 
         # CASE C: SUSTAINED DOWN (Escalation Ladder)
         elif current_status == "DOWN" and self.state == "DOWN":
@@ -653,7 +661,7 @@ def main():
         load_dynamic_config()
         for t in targets:
             t.update(now)
-        time.sleep(3)
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()
