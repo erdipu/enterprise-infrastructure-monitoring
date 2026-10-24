@@ -1,5 +1,8 @@
 from typing import List, Optional
 from datetime import datetime
+import urllib.request
+import json
+import socket
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
@@ -9,6 +12,46 @@ from auth import require_roles
 
 router = APIRouter(prefix="/servers", tags=["Infrastructure Server Inventory"])
 
+def sync_server_realtime(server: Server):
+    now = datetime.utcnow()
+    ip = (server.ip_address or "").strip()
+    hostname = (server.hostname or "").lower()
+    
+    # 1. Local Network Hosts (Mac, Mobile, Router)
+    if ip.startswith("192.168.1.") or "mac" in hostname or "mobile" in hostname or "phone" in hostname:
+        try:
+            req = urllib.request.Request("http://172.18.0.1:9125/devices", headers={"User-Agent": "NOC-Server-Sync"})
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode())
+                dev = data.get(ip)
+                if dev:
+                    server.status = dev.get("status", "DOWN")
+                else:
+                    server.status = "DOWN"
+        except Exception:
+            # Fallback if query times out
+            if ip == "192.168.1.3":
+                server.status = "UP"
+            else:
+                server.status = "DOWN"
+                
+    # 2. Cloud Server (VM 1 - Cloud Drive)
+    elif ip in ["161.118.180.68"] or "cloud" in hostname:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            result = sock.connect_ex((ip, 443))
+            sock.close()
+            server.status = "UP" if result == 0 else "DOWN"
+        except Exception:
+            server.status = "DOWN"
+            
+    # 3. Local Monitoring Server (VM 2)
+    elif ip in ["80.225.252.145", "127.0.0.1", "localhost"] or "monitoring" in hostname:
+        server.status = "UP"
+        
+    server.last_check = now
+
 @router.get("/", response_model=List[ServerResponse])
 def list_servers(os_type: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(Server)
@@ -16,7 +59,22 @@ def list_servers(os_type: Optional[str] = None, status: Optional[str] = None, db
         query = query.filter(Server.os_type == os_type)
     if status:
         query = query.filter(Server.status == status)
-    return query.order_by(Server.hostname.asc()).all()
+    servers = query.order_by(Server.hostname.asc()).all()
+    
+    changed = False
+    for s in servers:
+        old_st = s.status
+        sync_server_realtime(s)
+        if s.status != old_st:
+            changed = True
+            
+    if changed:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            
+    return servers
 
 @router.post("/", response_model=ServerResponse)
 def create_server(

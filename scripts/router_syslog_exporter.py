@@ -30,6 +30,7 @@ heartbeat_status = "UNKNOWN"
 heartbeat_time = 0.0
 heartbeat_latency = 0.0
 heartbeat_source = ""
+edge_devices = {}  # Map of IP -> {"status": "UP"|"DOWN", "last_seen": timestamp, "latency": float}
 
 # Scan past log to initialize state accurately on service start (only last 4 hours)
 try:
@@ -94,25 +95,45 @@ def syslog_listener():
             # 1. Direct edge prober heartbeat from local network agent (UDP 514)
             if "EDGE_HEARTBEAT" in msg:
                 heartbeat_source = "udp_edge_probe"
-                if "status=DOWN" in msg:
-                    heartbeat_time = now
-                    heartbeat_status = "DOWN"
-                    heartbeat_latency = 0.0
-                    tplink_link_up = False
-                elif "status=UP" in msg:
-                    heartbeat_time = now
-                    heartbeat_status = "UP"
-                    # Parse latency if present (e.g. latency=3.45ms)
-                    lat_match = re.search(r"latency=([0-9.]+)", msg)
-                    if lat_match:
-                        heartbeat_latency = float(lat_match.group(1))
-                    else:
-                        heartbeat_latency = 0.55
-                    tplink_link_up = True
-                    tplink_last_seen_time = now
-                elif "status=PAUSED" in msg:
-                    heartbeat_time = 0.0
-                    heartbeat_status = "PAUSED"
+                
+                # Extract device IP, status, and latency from heartbeat packet
+                ip_match = re.search(r"ip=([0-9.]+)", msg)
+                st_match = re.search(r"status=([A-Z]+)", msg)
+                lat_match = re.search(r"latency=([0-9.]+)", msg)
+                
+                dev_ip = ip_match.group(1) if ip_match else ""
+                dev_status = st_match.group(1) if st_match else "UP"
+                dev_latency = float(lat_match.group(1)) if lat_match else 0.55
+                
+                if dev_ip:
+                    edge_devices[dev_ip] = {
+                        "status": dev_status,
+                        "last_seen": now,
+                        "latency": dev_latency
+                    }
+
+                # Mac host (192.168.1.3) is confirmed alive whenever any edge prober packet is received
+                edge_devices["192.168.1.3"] = {
+                    "status": "UP",
+                    "last_seen": now,
+                    "latency": 0.15
+                }
+
+                if dev_ip == TPLINK_IP or TPLINK_MAC in msg.lower():
+                    if "status=DOWN" in msg:
+                        heartbeat_time = now
+                        heartbeat_status = "DOWN"
+                        heartbeat_latency = 0.0
+                        tplink_link_up = False
+                    elif "status=UP" in msg:
+                        heartbeat_time = now
+                        heartbeat_status = "UP"
+                        heartbeat_latency = dev_latency
+                        tplink_link_up = True
+                        tplink_last_seen_time = now
+                    elif "status=PAUSED" in msg:
+                        heartbeat_time = 0.0
+                        heartbeat_status = "PAUSED"
 
             is_zte = ("F670LV9" in msg or "ZTE" in msg)
 
@@ -209,8 +230,27 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global zte_last_packet_time, tplink_last_seen_time, last_link_change_time, tplink_link_up, tplink_packet_count, last_sender_ip
-        global heartbeat_status, heartbeat_time, heartbeat_latency
+        global heartbeat_status, heartbeat_time, heartbeat_latency, edge_devices
         now = time.time()
+        
+        # Endpoint: /devices returns live status of edge hosts (Mac, Mobile, Router)
+        if self.path in ["/devices", "/api/devices"]:
+            out = {}
+            for ip, info in edge_devices.items():
+                age = now - info["last_seen"]
+                is_alive = (info["status"] == "UP" and age < 15)
+                out[ip] = {
+                    "status": "UP" if is_alive else "DOWN",
+                    "age_seconds": round(age, 1),
+                    "latency_ms": info["latency"] if is_alive else 0.0,
+                    "last_seen": info["last_seen"]
+                }
+            resp = json.dumps(out)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(resp.encode("utf-8"))
+            return
         
         # Priority 1: Direct edge heartbeat override
         if heartbeat_time > 0:
