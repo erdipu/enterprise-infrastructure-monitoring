@@ -186,12 +186,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
             # Secondary router is UP only if:
             # 1. Primary gateway is receiving power and sending syslogs (zte_age < 120s)
             # 2. Physical switch port has not received an explicit link drop (tplink_link_up is True)
-            # 3. Heartbeat / syslog packet from secondary router is actively seen within 12 seconds
-            #    (TP-Link sends DHCP packets continuously every 5 seconds; silence > 12s indicates power-off/unplug)
-            mac_age = now - tplink_last_seen_time if tplink_last_seen_time > 0 else 999999
-            tplink_heartbeat_fresh = (mac_age <= 12)
-
-            is_up = 1 if (gateway_alive and tplink_link_up and tplink_heartbeat_fresh) else 0
+            is_up = 1 if (gateway_alive and tplink_link_up) else 0
             latency_ms = 0.55 if is_up == 1 else 0.0
 
         zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
