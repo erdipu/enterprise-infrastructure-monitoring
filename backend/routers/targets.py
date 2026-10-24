@@ -8,86 +8,25 @@ from schemas import MonitoringTargetResponse, MonitoringTargetCreate
 from auth import require_roles
 from pydantic import BaseModel
 import urllib.request
-import time
 import json
+from prober import probe_universal
 
 router = APIRouter(prefix="/targets", tags=["Synthetic Monitoring Targets"])
 
 def sync_target_realtime(target: MonitoringTarget):
     """
-    Real-time status check for targets so the UI never displays stale or cached status.
-    - Router/Heartbeat devices: Check if heartbeat arrived recently from router-syslog exporter.
-    - External websites/APIs: Real-time HTTP/Socket probe.
+    Real-time multi-protocol status check for targets:
+    Supports websites, APIs, private LAN IPs, and network hosts.
     """
     now = datetime.now(timezone.utc)
-    
-    # Check if this target is a local router (192.168.1.2) or marked as router
-    is_router = (
-        "router" in target.name.lower() or 
-        "wr845n" in target.name.lower() or 
-        target.url_or_host in ["192.168.1.2", "192.168.1.7"] or
-        "103.181.90.135" in (target.url_or_host or "") or
-        "103.181.90.226" in (target.url_or_host or "")
+    status, latency = probe_universal(
+        host=target.url_or_host,
+        port=target.port,
+        target_type=target.target_type
     )
-    
-    if is_router:
-        try:
-            # Query the cloud syslog exporter running on 172.18.0.1:9125 or 127.0.0.1:9125
-            req = urllib.request.Request("http://172.18.0.1:9125", headers={"User-Agent": "NOC-Realtime-Sync"})
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                data = resp.read().decode()
-                alive = 0
-                latency = 0.0
-                for line in data.splitlines():
-                    if line.startswith("router_syslog_alive") and not line.startswith("#"):
-                        alive = int(float(line.split()[-1]))
-                    elif line.startswith("router_syslog_last_seen_seconds") and not line.startswith("#"):
-                        age = float(line.split()[-1])
-                        latency = 0.6 if alive == 1 else 0.0
-                
-                if alive == 1:
-                    target.status = "UP"
-                    target.last_response_time_ms = latency
-                else:
-                    target.status = "DOWN"
-                    target.last_response_time_ms = 0.0
-                target.last_check = now
-        except Exception:
-            try:
-                # Fallback to local container host
-                req = urllib.request.Request("http://host.docker.internal:9125", headers={"User-Agent": "NOC-Realtime-Sync"})
-                with urllib.request.urlopen(req, timeout=2) as resp:
-                    data = resp.read().decode()
-                    alive = 0
-                    for line in data.splitlines():
-                        if line.startswith("router_syslog_alive") and not line.startswith("#"):
-                            alive = int(float(line.split()[-1]))
-                    if alive == 1:
-                        target.status = "UP"
-                        target.last_response_time_ms = 0.6
-                    else:
-                        target.status = "DOWN"
-                        target.last_response_time_ms = 0.0
-                    target.last_check = now
-            except Exception:
-                target.status = "DOWN"
-                target.last_response_time_ms = 0.0
-                target.last_check = now
-    else:
-        # Generic HTTP probe
-        if target.target_type in ["website", "api"] and target.url_or_host:
-            url = target.url_or_host if target.url_or_host.startswith("http") else f"http://{target.url_or_host}"
-            try:
-                start = time.time()
-                req = urllib.request.Request(url, headers={"User-Agent": "NOC-HealthCheck/1.0"})
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    elapsed = (time.time() - start) * 1000.0
-                    target.status = "UP" if resp.status < 400 else "DOWN"
-                    target.last_response_time_ms = round(elapsed, 1)
-            except Exception:
-                target.status = "DOWN"
-                target.last_response_time_ms = 0.0
-            target.last_check = now
+    target.status = status
+    target.last_response_time_ms = latency
+    target.last_check = now
 
 @router.get("/", response_model=List[MonitoringTargetResponse])
 def list_targets(target_type: Optional[str] = None, db: Session = Depends(get_db)):
@@ -96,11 +35,14 @@ def list_targets(target_type: Optional[str] = None, db: Session = Depends(get_db
         query = query.filter(MonitoringTarget.target_type == target_type)
     targets = query.order_by(MonitoringTarget.name.asc()).all()
     
-    # Real-time synchronization
     changed = False
     for t in targets:
+        old_st = t.status
+        old_lat = float(t.last_response_time_ms or 0.0)
         sync_target_realtime(t)
-        changed = True
+        if t.status != old_st or abs(float(t.last_response_time_ms or 0.0) - old_lat) > 0.01:
+            changed = True
+            
     if changed:
         try:
             db.commit()
@@ -115,11 +57,20 @@ def create_target(
     db: Session = Depends(get_db),
     _user = Depends(require_roles(["admin", "operator"]))
 ):
+    target_data = target_in.dict()
     existing = db.query(MonitoringTarget).filter(MonitoringTarget.name == target_in.name).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Target name already registered")
+        existing.url_or_host = target_data.get("url_or_host", existing.url_or_host)
+        existing.target_type = target_data.get("target_type", existing.target_type)
+        existing.port = target_data.get("port", existing.port)
+        existing.check_interval_sec = target_data.get("check_interval_sec", existing.check_interval_sec)
+        existing.expected_status_code = target_data.get("expected_status_code", existing.expected_status_code)
+        sync_target_realtime(existing)
+        db.commit()
+        db.refresh(existing)
+        return existing
 
-    target = MonitoringTarget(**target_in.dict())
+    target = MonitoringTarget(**target_data)
     sync_target_realtime(target)
     db.add(target)
     db.commit()
@@ -175,6 +126,7 @@ def receive_heartbeat(
     is_router_hb = (
         "router" in payload.target_name.lower() or
         "wr845n" in payload.target_name.lower() or
+        "192.168.1.2" in payload.target_name or
         "192.168.1.7" in payload.target_name
     )
     if is_router_hb:

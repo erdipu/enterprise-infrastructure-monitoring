@@ -158,7 +158,7 @@ async function loadServers() {
     const tbody = document.getElementById("serversTableBody");
     tbody.innerHTML = "";
     if (servers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" class="text-center text-secondary py-3">No registered servers. Click "+ Add Server" to register one.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="text-center text-secondary py-3">No registered servers. Click "+ Add Server" to register one.</td></tr>`;
       return;
     }
 
@@ -166,6 +166,9 @@ async function loadServers() {
       const statusBadge = s.status === "UP" ? "badge-up" : (s.status === "DOWN" ? "badge-down" : "badge-warning");
       const osIcon = s.os_type === "linux" ? "bi-ubuntu" : "bi-windows";
       const lastCheck = s.last_check ? new Date(s.last_check).toLocaleTimeString() : "--";
+      const respTime = s.status === "UP"
+        ? `<span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50 font-monospace">${(parseFloat(s.last_response_time_ms) || 0.5).toFixed(1)} ms</span>`
+        : `<span class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50 font-monospace">0.0 ms</span>`;
 
       tbody.innerHTML += `
         <tr>
@@ -174,11 +177,15 @@ async function loadServers() {
           <td><i class="bi ${osIcon} me-1 text-info"></i>${s.os_type.toUpperCase()}</td>
           <td><span class="badge bg-dark border border-secondary">${s.environment}</span></td>
           <td><span class="badge ${statusBadge}">${s.status}</span></td>
+          <td>${respTime}</td>
           <td>${s.cpu_cores} vCPU</td>
           <td>${s.total_ram_gb} GB</td>
           <td>${s.total_disk_gb} GB</td>
           <td class="text-secondary small">${lastCheck}</td>
           <td>
+            <button class="btn btn-outline-info btn-sm py-0 px-2 me-1" onclick="editServerIp(${s.id}, '${s.hostname}', '${s.ip_address}')" title="Edit IP Address">
+              <i class="bi bi-pencil"></i>
+            </button>
             <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteServer(${s.id}, '${s.hostname}')" title="Delete Server">
               <i class="bi bi-trash"></i>
             </button>
@@ -188,6 +195,27 @@ async function loadServers() {
     });
   } catch (err) {
     console.error("Failed to load servers:", err);
+  }
+}
+
+async function editServerIp(serverId, hostname, currentIp) {
+  const newIp = prompt(`Update IP Address for server "${hostname}":`, currentIp);
+  if (!newIp || newIp.trim() === "" || newIp.trim() === currentIp) return;
+  try {
+    const res = await fetch(`${API_BASE}/servers/${serverId}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ ip_address: newIp.trim() })
+    });
+    if (res.ok) {
+      await loadServers();
+      await loadDashboard();
+    } else {
+      const err = await res.json();
+      alert(err.detail || "Failed to update IP address");
+    }
+  } catch (e) {
+    alert("Error updating server IP: " + e.message);
   }
 }
 
@@ -452,7 +480,9 @@ function startAutoRefresh() {
   if (activePollingTimer) clearInterval(activePollingTimer);
   activePollingTimer = setInterval(() => {
     loadDashboard();
-  }, 15000); // 15-second refresh interval
+    loadServers();
+    loadTargets();
+  }, 3000); // 3-second live refresh for real-time status updates
 }
 
 // ----------------------------------------------------------------------------

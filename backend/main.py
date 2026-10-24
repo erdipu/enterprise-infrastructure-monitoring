@@ -126,6 +126,35 @@ def initialize_seed_data():
 
 initialize_seed_data()
 
+import threading
+import time
+
+def continuous_inventory_prober():
+    """Background engine that continuously probes all inventory servers and targets every 5 seconds."""
+    time.sleep(3)
+    logger.info("Universal Continuous Inventory Prober engine started.")
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                all_servers = db.query(Server).all()
+                for s in all_servers:
+                    servers.sync_server_realtime(s)
+
+                all_targets = db.query(MonitoringTarget).all()
+                for t in all_targets:
+                    targets.sync_target_realtime(t)
+
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.debug(f"Error in continuous inventory prober: {e}")
+        time.sleep(5)
+
+prober_thread = threading.Thread(target=continuous_inventory_prober, daemon=True, name="continuous_inventory_prober")
+prober_thread.start()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,

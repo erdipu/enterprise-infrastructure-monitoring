@@ -1,71 +1,39 @@
 from typing import List, Optional
 from datetime import datetime
-import urllib.request
-import json
-import socket
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Server
 from schemas import ServerResponse, ServerCreate, ServerUpdate
 from auth import require_roles
+from prober import probe_universal
 
 router = APIRouter(prefix="/servers", tags=["Infrastructure Server Inventory"])
 
 def sync_server_realtime(server: Server):
+    """Probes the server in real-time and updates its status and response time."""
     now = datetime.utcnow()
     ip = (server.ip_address or "").strip()
-    hostname = (server.hostname or "").lower()
-    
-    # 1. Local Network Hosts (Mac, Mobile, Router)
-    if ip.startswith("192.168.1.") or "mac" in hostname or "mobile" in hostname or "phone" in hostname:
-        try:
-            req = urllib.request.Request("http://172.18.0.1:9125/devices", headers={"User-Agent": "NOC-Server-Sync"})
-            with urllib.request.urlopen(req, timeout=1.5) as resp:
-                data = json.loads(resp.read().decode())
-                dev = data.get(ip)
-                if dev:
-                    server.status = dev.get("status", "DOWN")
-                else:
-                    server.status = "DOWN"
-        except Exception:
-            # Fallback if query times out
-            if ip == "192.168.1.3":
-                server.status = "UP"
-            else:
-                server.status = "DOWN"
-                
-    # 2. Cloud Server (VM 1 - Cloud Drive)
-    elif ip in ["161.118.180.68"] or "cloud" in hostname:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
-            result = sock.connect_ex((ip, 443))
-            sock.close()
-            server.status = "UP" if result == 0 else "DOWN"
-        except Exception:
-            server.status = "DOWN"
-            
-    # 3. Local Monitoring Server (VM 2)
-    elif ip in ["80.225.252.145", "127.0.0.1", "localhost"] or "monitoring" in hostname:
-        server.status = "UP"
-        
+    status, latency = probe_universal(ip, target_type="server")
+    server.status = status
+    server.last_response_time_ms = latency
     server.last_check = now
 
 @router.get("/", response_model=List[ServerResponse])
 def list_servers(os_type: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(Server)
     if os_type:
-        query = query.filter(Server.os_type == os_type)
+        query = query.filter(Server.os_type == os_type.lower())
     if status:
-        query = query.filter(Server.status == status)
+        query = query.filter(Server.status == status.upper())
     servers = query.order_by(Server.hostname.asc()).all()
     
     changed = False
     for s in servers:
         old_st = s.status
+        old_lat = float(s.last_response_time_ms or 0.0)
         sync_server_realtime(s)
-        if s.status != old_st:
+        if s.status != old_st or abs(float(s.last_response_time_ms or 0.0) - old_lat) > 0.01:
             changed = True
             
     if changed:
@@ -77,22 +45,31 @@ def list_servers(os_type: Optional[str] = None, status: Optional[str] = None, db
     return servers
 
 @router.post("/", response_model=ServerResponse)
-def create_server(
+def create_or_update_server(
     server_in: ServerCreate,
     db: Session = Depends(get_db),
     _user = Depends(require_roles(["admin", "operator"]))
 ):
-    existing = db.query(Server).filter(Server.hostname == server_in.hostname).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Server hostname already exists")
-
     server_data = server_in.dict()
-    # Normalize values to ensure strict PostgreSQL check constraint compliance
     server_data["environment"] = str(server_data.get("environment", "production")).lower()
     server_data["os_type"] = str(server_data.get("os_type", "linux")).lower()
-    server_data["status"] = str(server_data.get("status", "UP")).upper()
+
+    existing = db.query(Server).filter(Server.hostname == server_in.hostname).first()
+    if existing:
+        # Update existing record seamlessly instead of throwing duplicate error
+        existing.ip_address = server_data["ip_address"]
+        existing.os_type = server_data["os_type"]
+        existing.environment = server_data["environment"]
+        existing.cpu_cores = server_data.get("cpu_cores", existing.cpu_cores)
+        existing.total_ram_gb = server_data.get("total_ram_gb", existing.total_ram_gb)
+        existing.total_disk_gb = server_data.get("total_disk_gb", existing.total_disk_gb)
+        sync_server_realtime(existing)
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     server = Server(**server_data)
-    server.last_check = datetime.utcnow()
+    sync_server_realtime(server)
     db.add(server)
     db.commit()
     db.refresh(server)
@@ -110,8 +87,13 @@ def update_server(
         raise HTTPException(status_code=404, detail="Server not found")
 
     for key, value in server_in.dict(exclude_unset=True).items():
+        if key == "environment" and value:
+            value = str(value).lower()
+        elif key == "os_type" and value:
+            value = str(value).lower()
         setattr(server, key, value)
-    server.last_check = datetime.utcnow()
+        
+    sync_server_realtime(server)
     db.commit()
     db.refresh(server)
     return server
@@ -128,4 +110,3 @@ def delete_server(
     db.delete(server)
     db.commit()
     return {"status": "success", "message": f"Server {server.hostname} deleted"}
-

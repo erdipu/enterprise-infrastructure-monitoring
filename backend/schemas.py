@@ -48,6 +48,7 @@ class ServerBase(BaseModel):
     cpu_cores: int = 4
     total_ram_gb: float = 16.0
     total_disk_gb: float = 250.0
+    last_response_time_ms: Optional[float] = 0.0
 
 class ServerCreate(ServerBase):
     pass

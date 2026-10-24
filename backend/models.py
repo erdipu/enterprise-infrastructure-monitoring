@@ -32,6 +32,7 @@ class Server(Base):
     cpu_cores = Column(Integer, default=4)
     total_ram_gb = Column(Numeric(6, 2), default=16.00)
     total_disk_gb = Column(Numeric(8, 2), default=250.00)
+    last_response_time_ms = Column(Numeric(8, 2), default=0.0, nullable=True)
     last_check = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
