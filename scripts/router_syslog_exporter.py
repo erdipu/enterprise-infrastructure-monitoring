@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+"""
+Enterprise Router Syslog Prometheus Exporter with Multi-Port Link-State & Edge Prober Ingestion
+Streams real-time physical link-state events, positive pulses, and edge UDP heartbeat probes.
+Exposes Prometheus metrics on HTTP port 9125 and listens for Syslog on UDP port 514.
+"""
+
 import socket
 import time
 import json
@@ -14,11 +21,11 @@ TPLINK_IP = "192.168.1.2"
 zte_last_packet_time = time.time()
 tplink_last_seen_time = 0.0
 last_link_change_time = 0.0
-tplink_link_up = False           # Physical link on any ZTE LAN switch port
+tplink_link_up = True           # Physical link on any ZTE LAN switch port
 tplink_packet_count = 0
-last_sender_ip = "103.181.90.135"
+last_sender_ip = "103.181.90.187"
 
-# Direct edge heartbeat tracking (via POST /heartbeat)
+# Direct edge heartbeat tracking (via UDP 514 or POST /heartbeat)
 heartbeat_status = "UNKNOWN"
 heartbeat_time = 0.0
 heartbeat_latency = 0.0
@@ -73,9 +80,10 @@ except Exception as e:
 
 def syslog_listener():
     global zte_last_packet_time, tplink_last_seen_time, last_link_change_time, tplink_link_up, tplink_packet_count, last_sender_ip
+    global heartbeat_status, heartbeat_time, heartbeat_latency, heartbeat_source
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", 514))
-    print("Syslog UDP listener running on 514 with multi-port link-state & positive pulse detection...")
+    print("Syslog UDP listener running on 514 with multi-port link-state & edge prober ingestion...")
     while True:
         try:
             data, addr = sock.recvfrom(2048)
@@ -83,15 +91,36 @@ def syslog_listener():
             now = time.time()
             last_sender_ip = addr[0]
 
+            # 1. Direct edge prober heartbeat from local network agent (UDP 514)
+            if "EDGE_HEARTBEAT" in msg:
+                heartbeat_source = "udp_edge_probe"
+                if "status=DOWN" in msg:
+                    heartbeat_time = now
+                    heartbeat_status = "DOWN"
+                    heartbeat_latency = 0.0
+                    tplink_link_up = False
+                elif "status=UP" in msg:
+                    heartbeat_time = now
+                    heartbeat_status = "UP"
+                    # Parse latency if present (e.g. latency=3.45ms)
+                    lat_match = re.search(r"latency=([0-9.]+)", msg)
+                    if lat_match:
+                        heartbeat_latency = float(lat_match.group(1))
+                    else:
+                        heartbeat_latency = 0.55
+                    tplink_link_up = True
+                    tplink_last_seen_time = now
+                elif "status=PAUSED" in msg:
+                    heartbeat_time = 0.0
+                    heartbeat_status = "PAUSED"
+
             is_zte = ("F670LV9" in msg or "ZTE" in msg)
 
             if is_zte:
-                # 1. Heartbeat from ZTE Gateway (Primary Fiber Router)
+                # Heartbeat from ZTE Gateway (Primary Fiber Router)
                 zte_last_packet_time = now
 
-                # Disconnection signals from ZTE Gateway:
-                # - Physical switch port link drop
-                # - Failed switch record lookup for secondary router
+                # Physical switch port link drop
                 is_link_drop = (
                     re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*disabled\s*state", msg, re.IGNORECASE) is not None or
                     "link down" in msg.lower() or
@@ -101,23 +130,32 @@ def syslog_listener():
                     tplink_link_up = False
                     last_link_change_time = now
 
-                # Physical link / bridge attachment restored on ZTE switch port (eth0-eth3)
+                # Physical link / bridge attachment restored on ZTE switch port
                 elif (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", msg, re.IGNORECASE) or 
                       "link up" in msg.lower() or 
                       "can't be same with br0" in msg.lower()):
                     tplink_link_up = True
                     tplink_last_seen_time = now
                     last_link_change_time = now
+                    tplink_packet_count += 1
+                    # Bootup event: router is definitely powering back up
+                    if "can't be same with br0" in msg.lower():
+                        heartbeat_time = now
+                        heartbeat_status = "UP"
 
                 # Positive pulse: MAC address or IP query from ZTE switch table
-                if TPLINK_MAC in msg.lower() or (TPLINK_IP in msg and "DebugPrintf" in msg and "record not find" not in msg.lower()):
-                    tplink_last_seen_time = now
+                elif (TPLINK_MAC in msg.lower() or 
+                      ("DHCPD:" in msg and "AP's DHCP server" in msg)):
                     tplink_link_up = True
+                    tplink_last_seen_time = now
                     last_link_change_time = now
                     tplink_packet_count += 1
+                    if "AP's DHCP server" in msg:
+                        heartbeat_time = now
+                        heartbeat_status = "UP"
 
             else:
-                # 2. Direct packet from TP-Link secondary router firmware
+                # Direct packet from TP-Link secondary router firmware
                 is_direct_tplink = (
                     "TP-Link" in msg or 
                     "WR845N" in msg or 
@@ -132,6 +170,8 @@ def syslog_listener():
                     tplink_link_up = True
                     last_link_change_time = now
                     tplink_packet_count += 1
+                    heartbeat_time = now
+                    heartbeat_status = "UP"
 
             with open("/var/log/router_telemetry.log", "a") as f:
                 f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} [{addr[0]}] {msg}\n')
@@ -172,20 +212,37 @@ class MetricsHandler(BaseHTTPRequestHandler):
         global heartbeat_status, heartbeat_time, heartbeat_latency
         now = time.time()
         
-        # Priority 1: Direct edge heartbeat override (valid for 90s)
-        if heartbeat_time > 0 and (now - heartbeat_time) < 90:
-            is_up = 1 if heartbeat_status == "UP" else 0
-            latency_ms = heartbeat_latency if is_up == 1 else 0.0
-            data_source = "edge_heartbeat"
+        # Priority 1: Direct edge heartbeat override
+        if heartbeat_time > 0:
+            edge_age = now - heartbeat_time
+            if edge_age < 8:
+                # Active streaming
+                is_up = 1 if heartbeat_status == "UP" else 0
+                latency_ms = heartbeat_latency if is_up == 1 else 0.0
+                data_source = "edge_heartbeat"
+            elif heartbeat_status == "DOWN":
+                # Explicitly marked DOWN by edge prober
+                is_up = 0
+                latency_ms = 0.0
+                data_source = "edge_heartbeat_down"
+            elif edge_age >= 8 and edge_age < 1800:
+                # Abrupt stream silence (router Wi-Fi dropped / power off / link severed)
+                # Stays DOWN until recovery signal arrives from ZTE or edge agent
+                is_up = 0
+                latency_ms = 0.0
+                data_source = "edge_heartbeat_silence"
+            else:
+                # After 30 minutes of complete silence, laptop assumed sleeping/away; fall back to syslog
+                data_source = "syslog_telemetry"
+                zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
+                gateway_alive = (zte_age < 120)
+                is_up = 1 if (gateway_alive and tplink_link_up) else 0
+                latency_ms = 0.55 if is_up == 1 else 0.0
         else:
-            # Priority 2: Syslog Telemetry with TTL verification
+            # Priority 2: Passive Syslog Telemetry
             data_source = "syslog_telemetry"
             zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
             gateway_alive = (zte_age < 120)
-
-            # Secondary router is UP only if:
-            # 1. Primary gateway is receiving power and sending syslogs (zte_age < 120s)
-            # 2. Physical switch port has not received an explicit link drop (tplink_link_up is True)
             is_up = 1 if (gateway_alive and tplink_link_up) else 0
             latency_ms = 0.55 if is_up == 1 else 0.0
 
