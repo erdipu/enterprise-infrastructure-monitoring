@@ -20,9 +20,23 @@ document.addEventListener("DOMContentLoaded", () => {
   if (addMonEl) addMonitorModalInstance = new bootstrap.Modal(addMonEl);
 
   if (token) {
-    showAppView(username);
-    loadDashboard();
-    startAutoRefresh();
+    // Validate session token with backend /api/v1/auth/me
+    fetch(`${API_BASE}/auth/me`, { headers: authHeaders() })
+      .then(res => {
+        if (res.ok) {
+          showAppView(username);
+          loadDashboard();
+          startAutoRefresh();
+        } else {
+          console.warn("Session expired. Showing login view.");
+          logout();
+        }
+      })
+      .catch(() => {
+        showAppView(username);
+        loadDashboard();
+        startAutoRefresh();
+      });
   } else {
     showLoginView();
   }
@@ -519,6 +533,11 @@ async function submitAddMonitor() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          alert("Your login session has expired. Please log in again to save this monitor.");
+          logout();
+          return;
+        }
         const err = await res.json();
         alert(err.detail || "Failed to create synthetic monitor");
         return;
@@ -549,6 +568,11 @@ async function submitAddMonitor() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          alert("Your login session has expired. Please log in again to save this server.");
+          logout();
+          return;
+        }
         const err = await res.json();
         alert(err.detail || "Failed to create server");
         return;

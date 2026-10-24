@@ -24,7 +24,7 @@ class Settings:
     # JWT Authentication
     SECRET_KEY: str = os.getenv("SECRET_KEY", "enterprise_incident_monitoring_secret_key_change_in_prod_2026")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days session validity
 
     # Prometheus & Alertmanager
     PROMETHEUS_URL: str = os.getenv("PROMETHEUS_URL", "http://localhost:9090")

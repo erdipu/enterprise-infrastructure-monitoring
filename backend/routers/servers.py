@@ -28,7 +28,12 @@ def create_server(
     if existing:
         raise HTTPException(status_code=400, detail="Server hostname already exists")
 
-    server = Server(**server_in.dict())
+    server_data = server_in.dict()
+    # Normalize values to ensure strict PostgreSQL check constraint compliance
+    server_data["environment"] = str(server_data.get("environment", "production")).lower()
+    server_data["os_type"] = str(server_data.get("os_type", "linux")).lower()
+    server_data["status"] = str(server_data.get("status", "UP")).upper()
+    server = Server(**server_data)
     server.last_check = datetime.utcnow()
     db.add(server)
     db.commit()
