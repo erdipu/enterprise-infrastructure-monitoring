@@ -37,7 +37,7 @@ def get_ist_time_str():
 # ==============================================================================
 # Notification Credentials & Configuration
 # ==============================================================================
-EMAIL_ENABLED = True
+EMAIL_ENABLED = False
 EMAIL_SENDER = "infoworld2112@gmail.com"
 EMAIL_RECIPIENT = "infoworld2112@gmail.com"
 EMAIL_PASSWORD = "ypen pruc cznc xwhv"
