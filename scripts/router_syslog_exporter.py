@@ -236,9 +236,19 @@ class MetricsHandler(BaseHTTPRequestHandler):
         # Endpoint: /devices returns live status of edge hosts (Mac, Mobile, Router)
         if self.path in ["/devices", "/api/devices"]:
             out = {}
+            zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
+            gateway_alive = (zte_age < 120)
+            syslog_router_up = (gateway_alive and tplink_link_up)
+
             for ip, info in edge_devices.items():
                 age = now - info["last_seen"]
                 is_alive = (info["status"] == "UP" and age < 15)
+                # If target is the router (192.168.1.2) and prober is asleep/silent,
+                # fall back to direct ZTE/Router syslog telemetry so it stays UP!
+                if ip == TPLINK_IP and not is_alive and syslog_router_up:
+                    is_alive = True
+                    info["latency"] = 0.85
+
                 out[ip] = {
                     "status": "UP" if is_alive else "DOWN",
                     "age_seconds": round(age, 1),
@@ -248,45 +258,40 @@ class MetricsHandler(BaseHTTPRequestHandler):
             resp = json.dumps(out)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(resp.encode("utf-8"))
             return
         
-        # Priority 1: Direct edge heartbeat override
-        if heartbeat_time > 0:
-            edge_age = now - heartbeat_time
-            if edge_age < 15:
-                # Active streaming
-                is_up = 1 if heartbeat_status == "UP" else 0
-                latency_ms = heartbeat_latency if is_up == 1 else 0.0
-                data_source = "edge_heartbeat"
-            elif heartbeat_status == "DOWN":
-                # Explicitly marked DOWN by edge prober
+        # Calculate Router Status (Prometheus / Watchdog)
+        zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
+        gateway_alive = (zte_age < 120)
+        syslog_router_up = (gateway_alive and tplink_link_up)
+
+        # Priority 1: Direct edge heartbeat override from Mac while Mac is awake (< 15s)
+        if heartbeat_time > 0 and (now - heartbeat_time) < 15:
+            if heartbeat_status == "DOWN":
+                # Local prober is alive on Wi-Fi and explicitly confirmed router is unreachable
                 is_up = 0
                 latency_ms = 0.0
                 data_source = "edge_heartbeat_down"
-            elif edge_age >= 15 and edge_age < 1800:
-                # Abrupt stream silence (router Wi-Fi dropped / power off / link severed)
-                # Stays DOWN until recovery signal arrives from ZTE or edge agent
+            else:
+                is_up = 1
+                latency_ms = heartbeat_latency
+                data_source = "edge_heartbeat"
+        else:
+            # Priority 2: Mac laptop is asleep / shut down / closed lid.
+            # Gracefully transition to 24/7 direct Router/ZTE Syslog telemetry!
+            # The Mac being off NEVER marks the router as down!
+            if syslog_router_up:
+                is_up = 1
+                latency_ms = 0.85
+                data_source = "syslog_telemetry"
+            else:
                 is_up = 0
                 latency_ms = 0.0
-                data_source = "edge_heartbeat_silence"
-            else:
-                # After 30 minutes of complete silence, laptop assumed sleeping/away; fall back to syslog
-                data_source = "syslog_telemetry"
-                zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
-                gateway_alive = (zte_age < 120)
-                is_up = 1 if (gateway_alive and tplink_link_up) else 0
-                latency_ms = 0.55 if is_up == 1 else 0.0
-        else:
-            # Priority 2: Passive Syslog Telemetry
-            data_source = "syslog_telemetry"
-            zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
-            gateway_alive = (zte_age < 120)
-            is_up = 1 if (gateway_alive and tplink_link_up) else 0
-            latency_ms = 0.55 if is_up == 1 else 0.0
+                data_source = "syslog_gateway_silence"
 
-        zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
         mac_age = now - tplink_last_seen_time if tplink_last_seen_time > 0 else 999999
 
         metrics = (
