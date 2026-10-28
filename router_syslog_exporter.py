@@ -32,11 +32,16 @@ heartbeat_latency = 0.0
 heartbeat_source = ""
 edge_devices = {}  # Map of IP -> {"status": "UP"|"DOWN", "last_seen": timestamp, "latency": float}
 
-# Scan past log to initialize state accurately on service start (only last 4 hours)
+# Scan past log to initialize state accurately on service start (last 128KB of recent logs, < 5ms)
 try:
     now_ts = time.time()
-    with open("/var/log/router_telemetry.log", "r") as f:
-        for line in f:
+    with open("/var/log/router_telemetry.log", "rb") as f:
+        f.seek(0, 2)
+        f_size = f.tell()
+        f.seek(max(0, f_size - 131072))
+        chunk = f.read().decode(errors="ignore")
+        lines = chunk.splitlines()
+        for line in lines:
             # Check for link up across any LAN port (eth0-eth3 / port 1-4) or TP-Link reconnect
             if (re.search(r"br0:\s*port\s*\d+\(eth\d+\)\s*entered\s*forwarding\s*state", line, re.IGNORECASE) or 
                 "link up" in line.lower() or 
