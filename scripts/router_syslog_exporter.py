@@ -129,16 +129,18 @@ def syslog_listener():
                         heartbeat_time = now
                         heartbeat_status = "DOWN"
                         heartbeat_latency = 0.0
-                        tplink_link_up = False
                     elif "status=UP" in msg:
                         heartbeat_time = now
                         heartbeat_status = "UP"
                         heartbeat_latency = dev_latency
-                        tplink_link_up = True
                         tplink_last_seen_time = now
                     elif "status=PAUSED" in msg:
                         heartbeat_time = 0.0
                         heartbeat_status = "PAUSED"
+
+                with open("/var/log/router_telemetry.log", "a") as f:
+                    f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} [{addr[0]}] {msg}\n')
+                continue
 
             is_zte = ("F670LV9" in msg or "ZTE" in msg)
 
@@ -204,6 +206,51 @@ def syslog_listener():
         except Exception as e:
             time.sleep(1)
 
+def get_router_status(now):
+    """
+    Evaluates Secondary Router (192.168.1.2) status using multi-source telemetry:
+    1. Edge Prober Heartbeat (Mac on LAN)
+    2. Direct Router Syslog (TP-Link WR845N WAN syslog pulse every 5s)
+    3. ZTE Gateway physical link events
+
+    Guarantees:
+    - Mac laptop sleeping / off NEVER triggers a router DOWN alert (direct syslog keeps it UP).
+    - Router power-off ALWAYS triggers DOWN alert within 10-15s (both direct syslog & prober stop).
+    - Router bootup / power-on ALWAYS triggers RECOVERY alert immediately.
+    """
+    global zte_last_packet_time, tplink_last_seen_time, last_link_change_time, tplink_link_up
+    global heartbeat_status, heartbeat_time, heartbeat_latency
+
+    # 1. Direct router syslog freshness:
+    # TP-Link WR845N transmits DHCPC syslog every 5 seconds directly to WAN.
+    tplink_direct_alive = (tplink_last_seen_time > 0 and (now - tplink_last_seen_time) < 15)
+
+    # 2. Edge prober freshness:
+    # Mac prober pings 192.168.1.2 every 1 second.
+    mac_prober_alive = (heartbeat_time > 0 and (now - heartbeat_time) < 15)
+
+    # Priority 1: Mac prober is actively reporting on local Wi-Fi / LAN
+    if mac_prober_alive:
+        if heartbeat_status == "DOWN":
+            return 0, 0.0, "edge_heartbeat_down"
+        elif heartbeat_status == "UP":
+            return 1, heartbeat_latency, "edge_heartbeat"
+
+    # Priority 2: Mac laptop is asleep / shut down / closed lid / lost Wi-Fi.
+    # If TP-Link is sending direct WAN syslog (every 5s), router is definitely UP!
+    # Shutting down Mac NEVER marks router DOWN!
+    if tplink_direct_alive:
+        return 1, 0.85, "direct_tplink_syslog"
+
+    # Priority 3: If Mac prober previously caught an explicit DOWN before Wi-Fi dropped,
+    # maintain DOWN until recovery
+    if heartbeat_status == "DOWN":
+        return 0, 0.0, "edge_heartbeat_down"
+
+    # Priority 4: Both Mac prober and direct TP-Link syslog have gone silent (> 15 seconds)
+    # The router is powered off or disconnected!
+    return 0, 0.0, "router_telemetry_silence"
+
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         global heartbeat_status, heartbeat_time, heartbeat_latency, heartbeat_source
@@ -237,22 +284,24 @@ class MetricsHandler(BaseHTTPRequestHandler):
         global zte_last_packet_time, tplink_last_seen_time, last_link_change_time, tplink_link_up, tplink_packet_count, last_sender_ip
         global heartbeat_status, heartbeat_time, heartbeat_latency, edge_devices
         now = time.time()
-        
+
+        # Calculate Secondary Router Status
+        r_up, r_lat, data_source = get_router_status(now)
+
         # Endpoint: /devices returns live status of edge hosts (Mac, Mobile, Router)
         if self.path in ["/devices", "/api/devices"]:
             out = {}
-            zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
-            gateway_alive = (zte_age < 120)
-            syslog_router_up = (gateway_alive and tplink_link_up)
-
             for ip, info in edge_devices.items():
                 age = now - info["last_seen"]
                 is_alive = (info["status"] == "UP" and age < 15)
-                # If target is the router (192.168.1.2) and prober is asleep/silent,
-                # fall back to direct ZTE/Router syslog telemetry so it stays UP!
-                if ip == TPLINK_IP and not is_alive and syslog_router_up:
-                    is_alive = True
-                    info["latency"] = 0.85
+
+                # Secondary Router (192.168.1.2) uses authoritative multi-source status
+                if ip == TPLINK_IP:
+                    is_alive = (r_up == 1)
+                    if is_alive:
+                        info["latency"] = r_lat if r_lat > 0 else 0.85
+                    else:
+                        info["latency"] = 0.0
 
                 out[ip] = {
                     "status": "UP" if is_alive else "DOWN",
@@ -260,6 +309,15 @@ class MetricsHandler(BaseHTTPRequestHandler):
                     "latency_ms": info["latency"] if is_alive else 0.0,
                     "last_seen": info["last_seen"]
                 }
+
+            if TPLINK_IP not in out:
+                out[TPLINK_IP] = {
+                    "status": "UP" if r_up == 1 else "DOWN",
+                    "age_seconds": round(now - tplink_last_seen_time, 1) if tplink_last_seen_time > 0 else 999.0,
+                    "latency_ms": r_lat if r_up == 1 else 0.0,
+                    "last_seen": tplink_last_seen_time
+                }
+
             resp = json.dumps(out)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -267,48 +325,20 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(resp.encode("utf-8"))
             return
-        
-        # Calculate Router Status (Prometheus / Watchdog)
+
         zte_age = now - zte_last_packet_time if zte_last_packet_time > 0 else 999999
-        gateway_alive = (zte_age < 120)
-        syslog_router_up = (gateway_alive and tplink_link_up)
-
-        # Priority 1: Direct edge heartbeat override from Mac while Mac is awake (< 15s)
-        if heartbeat_time > 0 and (now - heartbeat_time) < 15:
-            if heartbeat_status == "DOWN":
-                # Local prober is alive on Wi-Fi and explicitly confirmed router is unreachable
-                is_up = 0
-                latency_ms = 0.0
-                data_source = "edge_heartbeat_down"
-            else:
-                is_up = 1
-                latency_ms = heartbeat_latency
-                data_source = "edge_heartbeat"
-        else:
-            # Priority 2: Mac laptop is asleep / shut down / closed lid.
-            # Gracefully transition to 24/7 direct Router/ZTE Syslog telemetry!
-            # The Mac being off NEVER marks the router as down!
-            if syslog_router_up:
-                is_up = 1
-                latency_ms = 0.85
-                data_source = "syslog_telemetry"
-            else:
-                is_up = 0
-                latency_ms = 0.0
-                data_source = "syslog_gateway_silence"
-
         mac_age = now - tplink_last_seen_time if tplink_last_seen_time > 0 else 999999
 
         metrics = (
             f'# HELP router_syslog_alive Router heartbeat indicator (1=up, 0=down)\n'
             f'# TYPE router_syslog_alive gauge\n'
-            f'router_syslog_alive{{target="TP-Link_WR845N",mac="{TPLINK_MAC}",sender="{last_sender_ip}",source="{data_source}"}} {is_up}\n\n'
+            f'router_syslog_alive{{target="TP-Link_WR845N",mac="{TPLINK_MAC}",sender="{last_sender_ip}",source="{data_source}"}} {r_up}\n\n'
             f'# HELP router_up Router availability indicator for Grafana\n'
             f'# TYPE router_up gauge\n'
-            f'router_up{{instance="{TPLINK_IP}",router="TP-Link_WR845N",mac="{TPLINK_MAC}",model="TL-WR845N"}} {is_up}\n\n'
+            f'router_up{{instance="{TPLINK_IP}",router="TP-Link_WR845N",mac="{TPLINK_MAC}",model="TL-WR845N"}} {r_up}\n\n'
             f'# HELP router_ping_latency_ms Router latency in milliseconds (drops to 0 when down)\n'
             f'# TYPE router_ping_latency_ms gauge\n'
-            f'router_ping_latency_ms{{instance="{TPLINK_IP}",router="TP-Link_WR845N",model="TL-WR845N"}} {latency_ms}\n\n'
+            f'router_ping_latency_ms{{instance="{TPLINK_IP}",router="TP-Link_WR845N",model="TL-WR845N"}} {r_lat}\n\n'
             f'# HELP router_syslog_last_seen_seconds Seconds since last received syslog packet\n'
             f'# TYPE router_syslog_last_seen_seconds gauge\n'
             f'router_syslog_last_seen_seconds{{target="TP-Link_WR845N"}} {zte_age:.1f}\n\n'
